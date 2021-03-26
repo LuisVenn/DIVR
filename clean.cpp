@@ -388,8 +388,8 @@ static int parseCmdArgs(int argc, char** argv) // LER AS FUNCOES DA COMMANDLINE
 }
 
 
-int frame_width = 1017;//result.size().width;
-int frame_height = 1516;//result.size().height;
+int frame_width = 1033;//1017;//result.size().width;
+int frame_height = 1554;//1516;//result.size().height;
 cv::VideoWriter output("out.avi",cv::VideoWriter::fourcc('M','J','P','G'),30,cv::Size(frame_width,frame_height));
 
 
@@ -471,9 +471,9 @@ int main(int argc, char* argv[]) //**************MAIN*********************
 				while (full_img.empty())
 				{
 					cap1 >> full_img;
-					save_full_img.push_back(full_img);
 					
 				}
+				save_full_img.push_back(full_img);
 			}
 			else if(i == 1) //recebe o frame da direita
 			{
@@ -482,8 +482,8 @@ int main(int argc, char* argv[]) //**************MAIN*********************
 				{
 					
 					cap2 >> full_img;
-					save_full_img.push_back(full_img);
 				}
+				save_full_img.push_back(full_img);
 			}
 				 
 			full_img_sizes[i] = full_img.size(); //guarda o tamanho de cada imagem no vetor de tamanhos com o indice do numero da imagem
@@ -562,11 +562,13 @@ int main(int argc, char* argv[]) //**************MAIN*********************
 	//SELECT IMAGES AND MATCHES SUBSET TO BUILD PANO
 		// Leave only images we are sure are from the same panorama ????
 		vector<int> indices = leaveBiggestComponent(features, pairwise_matches, conf_thresh); //define melhores matches e tira replicas
+		
 		vector<Mat> img_subset;
 		vector<String> img_names_subset;
 		vector<Size> full_img_sizes_subset;
 		for (size_t i = 0; i < indices.size(); ++i) //dubplica tamanhos vetores imagens nomes e tamanho
 		{
+			cout << indices[i] << "\n";
 			img_names_subset.push_back(img_names[indices[i]]);
 			img_subset.push_back(images[indices[i]]);
 			full_img_sizes_subset.push_back(full_img_sizes[indices[i]]);
@@ -866,9 +868,13 @@ int main(int argc, char* argv[]) //**************MAIN*********************
 		Mat result_8Bit;
 		while(1) //cap2.isOpened()
 		{
+			#if ENABLE_LOG
+				t = getTickCount();
+			#endif
+			cout << "************** NEXT FRAME PAIR ****************\n\n";
 			for (int img_idx = 0; img_idx < num_images; ++img_idx)
 			{
-				LOGLN("Compositing image #" << indices[img_idx]+1);
+				//LOGLN("Compositing image #" << indices[img_idx]+1);
 		//RESIZE LOW RESOLUTION
 				// Read image and resize it if necessary
 				//full_img = cv::imread("ESQ.jpeg" , cv::IMREAD_GRAYSCALE);
@@ -883,12 +889,19 @@ int main(int argc, char* argv[]) //**************MAIN*********************
 				}
 				else
 				{
+					
 					if(img_idx == 0)
+					{
+						cout << "Getting left frame...\n";
 						cap1 >> full_img;
+					}
 					else
-						cap2 >> full_img;				
+					{
+						cout << "Getting right frame...\n";
+						cap2 >> full_img;
+					}				
 				}		
-				cout << "1\n";
+				
 				//imshow("save_full",save_full_img[0]);
 				//waitKey(0);
 				
@@ -899,7 +912,7 @@ int main(int argc, char* argv[]) //**************MAIN*********************
 				
 				if (!is_compose_scale_set) //so entra aqui 1 x
 				{
-					cout<< "entrei no compose scale\n";
+					cout<< "Setting compose scale...\n";
 					if (compose_megapix > 0)
 						compose_scale = min(1.0, sqrt(compose_megapix * 1e6 / full_img.size().area()));
 					is_compose_scale_set = true;
@@ -938,8 +951,7 @@ int main(int argc, char* argv[]) //**************MAIN*********************
 				if (abs(compose_scale - 1) > 1e-1)
 					resize(full_img, img, Size(), compose_scale, compose_scale, INTER_LINEAR_EXACT);
 				else
-					img = full_img;
-				cout << "2\n";	
+					img = full_img;	
 				full_img.release();
 				Size img_size = img.size();
 
@@ -947,29 +959,29 @@ int main(int argc, char* argv[]) //**************MAIN*********************
 				cameras[img_idx].K().convertTo(K, CV_32F);
 
 				// Warp the current image
+				cout << "Warping image...\n";
 				warper->warp(img, K, cameras[img_idx].R, INTER_LINEAR, BORDER_REFLECT, img_warped);
-				cout << "3\n";
 
 				// Warp the current image mask
 				mask.create(img_size, CV_8U);
 				mask.setTo(Scalar::all(255));
+				cout << "Warping mask...\n";
 				warper->warp(mask, K, cameras[img_idx].R, INTER_NEAREST, BORDER_CONSTANT, mask_warped);
-				cout << "4\n";
+				
 				// Compensate exposure
+				cout << "Compensating exposure...\n";
 				compensator->apply(img_idx, corners[img_idx], img_warped, mask_warped);
-				cout << "5\n";
 				img_warped.convertTo(img_warped_s, CV_16S);
 				img_warped.release();
 				img.release();
 				mask.release();
-				cout << "6\n";
 				dilate(masks_warped[img_idx], dilated_mask, Mat());
 				resize(dilated_mask, seam_mask, mask_warped.size(), 0, 0, INTER_LINEAR_EXACT);
 				mask_warped = seam_mask & mask_warped;
-				cout << "7\n";
+				
 				if (!blender && !timelapse)
 				{
-					cout << "entrei no !blender e !timelapse\n";
+					cout << "Creating blender...\n";
 					blender = Blender::createDefault(blend_type, try_cuda);
 					Size dst_sz = resultRoi(corners, sizes).size();
 					float blend_width = sqrt(static_cast<float>(dst_sz.area())) * blend_strength / 100.f;
@@ -1016,19 +1028,22 @@ int main(int argc, char* argv[]) //**************MAIN*********************
 					blender->feed(img_warped_s, mask_warped, corners[img_idx]); //img warped s e mask warped sao inputs com o corner top left
 				}
 			}
-			cout << "8\n";
+			
 			if (!timelapse)
 			{
+				cout << "Blending...\n";
 				Mat result, result_mask;
 				blender->blend(result, result_mask);
 				LOGLN("Compositing, time: " << ((getTickCount() - t) / getTickFrequency()) << " sec");
 				result.convertTo(result_8Bit, CV_8U);
+				cout << "height:" << result_8Bit.size().height << "\n";
+				cout << "width:" << result_8Bit.size().width << "\n";
+				cout << "Writing frame...\n";				
 				output.write(result_8Bit);
-				cout << "9\n";
 				//imwrite(result_name, result);
 			}
 
-			LOGLN("Finished, total time: " << ((getTickCount() - app_start_time) / getTickFrequency()) << " sec");
+			LOGLN("Frame finished, total time: " << ((getTickCount() - t) / getTickFrequency()) << " sec");
 			blender.release();
 		}
 	
