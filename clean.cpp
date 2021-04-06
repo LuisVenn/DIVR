@@ -455,13 +455,44 @@ int main(int argc, char* argv[]) //**************MAIN*********************
     double seam_work_aspect = 1;
     
     //Cria a captura
-    
+    //Pode ter de 2 a 8 camaras
 		cv::VideoCapture cap1(samples::findFile(img_names[0]));
 		cv::VideoCapture cap2(samples::findFile(img_names[1]));
+		cv::VideoCapture cap3(samples::findFile(img_names[0]));
+		cv::VideoCapture cap4(samples::findFile(img_names[1]));
+		cv::VideoCapture cap5(samples::findFile(img_names[0]));
+		cv::VideoCapture cap6(samples::findFile(img_names[1]));
+		cv::VideoCapture cap7(samples::findFile(img_names[0]));
+		cv::VideoCapture cap8(samples::findFile(img_names[1]));
+		
+		if(num_images > 2)
+		{
+			cv::VideoCapture cap3(samples::findFile(img_names[2]));
+			if(num_images > 3)
+			{	
+				cv::VideoCapture cap4(samples::findFile(img_names[3]));
+				if(num_images > 4)
+				{
+					cv::VideoCapture cap5(samples::findFile(img_names[4]));
+					if(num_images > 5)
+					{
+						cv::VideoCapture cap6(samples::findFile(img_names[5]));
+						if(num_images > 6)
+						{
+							cv::VideoCapture cap7(samples::findFile(img_names[6]));
+							if(num_images > 7)	
+								cv::VideoCapture cap8(samples::findFile(img_names[7]));
+						}
+					}
+				}
+			}
+		}
+		
 		vector<Mat> save_full_img;
 		bool esq = 1;
 	
 	//ciclo para registar,redimensionar e detetar as features nas imagens
+	//recebe uma framde de uma das camaras de cada vez
 	
 		for (int i = 0; i < num_images; ++i)
 		{
@@ -482,6 +513,66 @@ int main(int argc, char* argv[]) //**************MAIN*********************
 				{
 					
 					cap2 >> full_img;
+				}
+				save_full_img.push_back(full_img);
+			}
+			else if(i == 2) //recebe o frame da direita
+			{
+				
+				while (full_img.empty())
+				{
+					
+					cap3 >> full_img;
+				}
+				save_full_img.push_back(full_img);
+			}
+			else if(i == 3) //recebe o frame da direita
+			{
+				
+				while (full_img.empty())
+				{
+					
+					cap4 >> full_img;
+				}
+				save_full_img.push_back(full_img);
+			}
+			else if(i == 4) //recebe o frame da direita
+			{
+				
+				while (full_img.empty())
+				{
+					
+					cap5 >> full_img;
+				}
+				save_full_img.push_back(full_img);
+			}
+			else if(i == 5) //recebe o frame da direita
+			{
+				
+				while (full_img.empty())
+				{
+					
+					cap6 >> full_img;
+				}
+				save_full_img.push_back(full_img);
+			}
+			else if(i == 6) //recebe o frame da direita
+			{
+				
+				while (full_img.empty())
+				{
+					
+					cap7 >> full_img;
+				}
+				save_full_img.push_back(full_img);
+			}
+			else if(i == 7) //recebe o frame da direita
+			{
+				
+				while (full_img.empty())
+				{
+					
+					cap8 >> full_img;
 				}
 				save_full_img.push_back(full_img);
 			}
@@ -637,19 +728,6 @@ int main(int argc, char* argv[]) //**************MAIN*********************
 		
 		// Find median focal length ???????????????
 		
-		//float dataK0[3][3] = {{741.589084631947, 0, 447},{0, 741.589084631947, 335.5},{0, 0, 1}};
-		//float dataK1[3][3] = {{746.0560269226139, 0, 447},{0, 746.0560269226139, 335.5},{ 0, 0, 1}};
-		//float dataR0[3][3] = {{0.99999994, 4.7962273e-10, -8.1438079e-10},{-2.8249323e-09, 1, -6.4228316e-09},{-8.1438079e-10, 9.6154285e-10, 1}};
-		//float dataR1[3][3] = {{0.67201602, -0.59644109, 0.43892187},{0.52131325, 0.80198509, 0.29163745},{-0.52595335, 0.032830738, 0.8498795}};
-		//cv::Mat MdataK0 = cv::Mat(3,3,CV_32F,dataK0);
-		//cv::Mat MdataK1 = cv::Mat(3,3,CV_32F,dataK1);
-		//cv::Mat MdataR0 = cv::Mat(3,3,CV_32F,dataR0);
-		//cv::Mat MdataR1 = cv::Mat(3,3,CV_32F,dataR1);
-		
-		//cameras[0].K() = MdataK0;
-		//cameras[1].K() = MdataK1;
-		//cameras[0].R = MdataR0;
-		//cameras[1].R = MdataR1;
 		vector<double> focals;
 		for (size_t i = 0; i < cameras.size(); ++i) //apresenta parametros da camara ajustados (R é tambem ajustado no bundle provavelmente)
 		{
@@ -874,41 +952,58 @@ int main(int argc, char* argv[]) //**************MAIN*********************
 			cout << "************** NEXT FRAME PAIR ****************\n\n";
 			for (int img_idx = 0; img_idx < num_images; ++img_idx)
 			{
-				//LOGLN("Compositing image #" << indices[img_idx]+1);
-		//RESIZE LOW RESOLUTION
-				// Read image and resize it if necessary
-				//full_img = cv::imread("ESQ.jpeg" , cv::IMREAD_GRAYSCALE);
-				//cv::VideoCapture cap(samples::findFile(img_names[img_idx])); //busca frame 
-				//substituir por ir bucar a posicao de um vetor imd_idx a frame lida anteriormente
-				//cap >> full_img;
 				
 				if (firstframe)
 				{
 					full_img = save_full_img[img_idx];
-					firstframe = false;
+					if (img_idx == (num_images-1))
+						firstframe = false;
 				}
 				else
 				{
 					
 					if(img_idx == 0)
 					{
-						cout << "Getting left frame...\n";
+						cout << "Getting frame 1...\n";
 						cap1 >> full_img;
 					}
-					else
+					else if(img_idx == 1)
 					{
-						cout << "Getting right frame...\n";
+						cout << "Getting frame 2...\n";
 						cap2 >> full_img;
-					}				
+					}
+					else if(img_idx == 2)
+					{
+						cout << "Getting frame 3...\n";
+						cap3 >> full_img;
+					}
+					else if(img_idx == 3)
+					{
+						cout << "Getting frame 4...\n";
+						cap4 >> full_img;
+					}
+					else if(img_idx == 4)
+					{
+						cout << "Getting frame 5...\n";
+						cap5 >> full_img;
+					}
+					else if(img_idx == 5)
+					{
+						cout << "Getting frame 6...\n";
+						cap6 >> full_img;
+					}
+					else if(img_idx == 6)
+					{
+						cout << "Getting frame 7...\n";
+						cap7 >> full_img;
+					}
+					else if(img_idx == 7)
+					{
+						cout << "Getting frame 8...\n";
+						cap8 >> full_img;
+					}
+									
 				}		
-				
-				//imshow("save_full",save_full_img[0]);
-				//waitKey(0);
-				
-				//while(full_img.empty())
-				//
-				//	cap >> full_img;
-				//
 				
 				if (!is_compose_scale_set) //so entra aqui 1 x
 				{
@@ -960,24 +1055,13 @@ int main(int argc, char* argv[]) //**************MAIN*********************
 
 				// Warp the current image
 				cout << "Warping image...\n";
-				#if ENABLE_LOG
-				t = getTickCount();
-				#endif
-				
-				//warper->warp(img, K, cameras[img_idx].R, INTER_LINEAR, BORDER_REFLECT, img_warped);
+				warper->warp(img, K, cameras[img_idx].R, INTER_LINEAR, BORDER_REFLECT, img_warped);
 
-				LOGLN("Warping images, time: " << ((getTickCount() - t) / getTickFrequency()) << " sec");
-				
 				// Warp the current image mask
 				mask.create(img_size, CV_8U);
 				mask.setTo(Scalar::all(255));
 				cout << "Warping mask...\n";
-				#if ENABLE_LOG
-				t = getTickCount();
-				#endif
 				warper->warp(mask, K, cameras[img_idx].R, INTER_NEAREST, BORDER_CONSTANT, mask_warped);
-				
-				LOGLN("Warping mask, time: " << ((getTickCount() - t) / getTickFrequency()) << " sec");
 				
 				// Compensate exposure
 				cout << "Compensating exposure...\n";
