@@ -960,13 +960,24 @@ int main(int argc, char* argv[]) //**************MAIN*********************
 
 				// Warp the current image
 				cout << "Warping image...\n";
-				warper->warp(img, K, cameras[img_idx].R, INTER_LINEAR, BORDER_REFLECT, img_warped);
+				#if ENABLE_LOG
+				t = getTickCount();
+				#endif
+				
+				//warper->warp(img, K, cameras[img_idx].R, INTER_LINEAR, BORDER_REFLECT, img_warped);
 
+				LOGLN("Warping images, time: " << ((getTickCount() - t) / getTickFrequency()) << " sec");
+				
 				// Warp the current image mask
 				mask.create(img_size, CV_8U);
 				mask.setTo(Scalar::all(255));
 				cout << "Warping mask...\n";
+				#if ENABLE_LOG
+				t = getTickCount();
+				#endif
 				warper->warp(mask, K, cameras[img_idx].R, INTER_NEAREST, BORDER_CONSTANT, mask_warped);
+				
+				LOGLN("Warping mask, time: " << ((getTickCount() - t) / getTickFrequency()) << " sec");
 				
 				// Compensate exposure
 				cout << "Compensating exposure...\n";
