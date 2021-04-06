@@ -388,8 +388,8 @@ static int parseCmdArgs(int argc, char** argv) // LER AS FUNCOES DA COMMANDLINE
 }
 
 
-int frame_width = 1033;//1017;//result.size().width;
-int frame_height = 1554;//1516;//result.size().height;
+int frame_width = 1017;//1033;//result.size().width;
+int frame_height = 1516;//1554;result.size().height;
 cv::VideoWriter output("out.avi",cv::VideoWriter::fourcc('M','J','P','G'),30,cv::Size(frame_width,frame_height));
 
 
