@@ -388,8 +388,8 @@ static int parseCmdArgs(int argc, char** argv) // LER AS FUNCOES DA COMMANDLINE
 }
 
 
-int frame_width = 1017;//1033;//result.size().width;
-int frame_height = 1516;//1554;result.size().height;
+int frame_width = 1228;//4621;//1017;//1033;//result.size().width;
+int frame_height = 1838;//1516;//1554;result.size().height;
 cv::VideoWriter output("out.avi",cv::VideoWriter::fourcc('M','J','P','G'),30,cv::Size(frame_width,frame_height));
 
 
@@ -458,7 +458,7 @@ int main(int argc, char* argv[]) //**************MAIN*********************
     //Pode ter de 2 a 8 camaras
 		cv::VideoCapture cap1(samples::findFile(img_names[0]));
 		cv::VideoCapture cap2(samples::findFile(img_names[1]));
-		cv::VideoCapture cap3(samples::findFile(img_names[0]));
+		cv::VideoCapture cap3(samples::findFile(img_names[2]));
 		cv::VideoCapture cap4(samples::findFile(img_names[1]));
 		cv::VideoCapture cap5(samples::findFile(img_names[0]));
 		cv::VideoCapture cap6(samples::findFile(img_names[1]));
