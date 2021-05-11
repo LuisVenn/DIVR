@@ -6,6 +6,53 @@
 #include <iostream>
 #include "opencv2/imgcodecs.hpp"
 
+void color_map(cv::Mat& input /*CV_32FC1*/, cv::Mat& dest, int color_map){
+
+  int num_bar_w=30;
+  int color_bar_w=10;
+  int vline=10;
+
+  cv::Mat win_mat(cv::Size(input.cols+num_bar_w+num_bar_w+vline, input.rows), CV_8UC3, cv::Scalar(255,255,255));
+
+  //Input image to
+  double Min, Max;
+  cv::minMaxLoc(input, &Min, &Max);
+  int max_int=ceil(Max);
+
+  std::cout<<" Min "<< Min<<" Max "<< Max<<std::endl;
+
+  input.convertTo(input,CV_8UC3,255.0/(Max-Min),-255.0*Min/(Max-Min));
+  input.convertTo(input, CV_8UC3);
+
+  cv::Mat M;
+  cv::applyColorMap(input, M, color_map);
+
+  M.copyTo(win_mat(cv::Rect(  0, 0, input.cols, input.rows)));
+
+  //Scale
+  cv::Mat num_window(cv::Size(num_bar_w, input.rows), CV_8UC3, cv::Scalar(255,255,255));
+  for(int i=0; i<=7; i++){
+      int j=i*input.rows/8;
+      float value = (Max/8)*i;
+      cv::putText(num_window, std::to_string(value), cv::Point(5, num_window.rows-j-5),cv::FONT_HERSHEY_SIMPLEX, 0.6 , cv::Scalar(0,0,0), 1 , 2 , false);
+  }
+
+  //color bar
+  cv::Mat color_bar(cv::Size(color_bar_w, input.rows), CV_8UC3, cv::Scalar(255,255,255));
+  cv::Mat cb;
+  for(int i=0; i<color_bar.rows; i++){
+    for(int j=0; j<color_bar_w; j++){
+      int v=255-255*i/color_bar.rows;
+      color_bar.at<cv::Vec3b>(i,j)=cv::Vec3b(v,v,v);
+    }
+  }
+
+  color_bar.convertTo(color_bar, CV_8UC3);
+  cv::applyColorMap(color_bar, cb, color_map);
+  num_window.copyTo(win_mat(cv::Rect(input.cols+vline+color_bar_w, 0, num_bar_w, input.rows)));
+  cb.copyTo(win_mat(cv::Rect(input.cols+vline, 0, color_bar_w, input.rows)));
+  dest=win_mat.clone();
+}
 
 // initialize values for StereoSGBM parameters
 int numDisparities = 8;
@@ -102,6 +149,8 @@ int main()
   cv::resizeWindow("Image1",960,536);
    cv::namedWindow("Image2",cv::WINDOW_NORMAL);
   cv::resizeWindow("Image2",960,536);
+  cv::namedWindow("Out",cv::WINDOW_NORMAL);
+  cv::resizeWindow("Out",960,536);
   // Initialize variables to store the maps for stereo rectification
   cv::Mat Left_Stereo_Map1, Left_Stereo_Map2;
   cv::Mat Right_Stereo_Map1, Right_Stereo_Map2;
@@ -157,10 +206,10 @@ int main()
   
   cv::Mat frameL,frameR;
   
-  imgL = cv::imread("./Disparity_map/Set_2/calib_2cam_01_2/Test/left_eye.jpg"); //!!!!!!!!!!!!!!!!!!!!!!!
+  imgL = cv::imread("./Disparity_map/Set_2/calib_2cam_01_2/Test/1_left_eye.jpg"); //!!!!!!!!!!!!!!!!!!!!!!!
   std::cout << "deu L\n";
   cv::imshow("Image1",imgL);
-  imgR = cv::imread("./Disparity_map/Set_2/calib_2cam_03_2/Test/right_eye.jpg"); //!!!!!!!!!!!!!!!!!!!!!!!!
+  imgR = cv::imread("./Disparity_map/Set_2/calib_2cam_03_2/Test/1_right_eye.jpg"); //!!!!!!!!!!!!!!!!!!!!!!!!
   std::cout << "Deu R\n";
   cv::imshow("Image2",imgR);
 
@@ -188,8 +237,8 @@ int main()
               cv::BORDER_CONSTANT,
               0);
    
-    cv::imwrite("./Disparity_map/Set_2/calib_2cam_01_2/Test/left_eye_nice.jpg", Left_nice);
-    cv::imwrite("./Disparity_map/Set_2/calib_2cam_03_2/Test/right_eye_nice.jpg", Right_nice);
+    cv::imwrite("./Disparity_map/Set_2/calib_2cam_01_2/Test/1_left_eye_stereo_nice.jpg", Left_nice);
+    cv::imwrite("./Disparity_map/Set_2/calib_2cam_03_2/Test/1_right_eye_stereo_nice.jpg", Right_nice);
  
 
  while(true)
@@ -212,6 +261,9 @@ int main()
     // Displaying the disparity map
     cv::imshow("disparity",disparity);
     cv::imshow("Image",disparity);
+    cv::Mat out;
+	color_map(disparity, out, cv::COLORMAP_JET);
+	cv::imshow("Out",out);
 	std::cout << "A espera\n";
     // Close window using esc key
     if (cv::waitKey(0) == 102) cv::imwrite("./Disparity_map/Set_2/disparity_map.jpg", disparity);
