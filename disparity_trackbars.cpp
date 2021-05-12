@@ -55,8 +55,8 @@ void color_map(cv::Mat& input /*CV_32FC1*/, cv::Mat& dest, int color_map){
 }
 
 // initialize values for StereoSGBM parameters
-int numDisparities = 8;
-int blockSize = 5;
+int numDisparities = 13;
+int blockSize = 7;
 int preFilterType = 1;
 int preFilterSize = 1;
 int preFilterCap = 31;
@@ -76,7 +76,36 @@ cv::Mat imgL;
 cv::Mat imgR;
 cv::Mat imgL_gray;
 cv::Mat imgR_gray;
+ cv::Mat disp, disparity;
+  
+// Calc matrix M
+std::vector<float> z_vec;
+std::vector<cv::Point2f> coeff_vec;
 
+// These parameters can vary according to the setup
+// Keeping the target object at max_dist we store disparity values
+// after every sample_delta distance.
+//int max_dist = 300; // max distance to keep the target object (in cm)
+//int min_dist = 50; // Minimum distance the stereo setup can measure (in cm)
+int sample_delta = 50; // Distance between two sampling points (in cm)
+int Z = 50;
+
+// Defining callback functions for mouse events
+void mouseEvent(int evt, int x, int y, int flags, void* param) {                    
+    float depth_val;
+
+    if (evt == cv::EVENT_LBUTTONDOWN) {
+      depth_val  = disparity.at<float>(y,x);
+
+      if (depth_val > 0)
+      {
+        z_vec.push_back(Z);
+        coeff_vec.push_back(cv::Point2f(1.0f/(float)depth_val, 1.0f));
+        std::cout << "Registei um ponto com Z =" << Z << "com disparidade =" << depth_val << "\n";  
+        
+      }
+    }  
+}
 
 // Defining callback functions for the trackbars to update parameter values
 
@@ -145,12 +174,13 @@ int main()
   // Initialize windows size
   cv::namedWindow("Image",cv::WINDOW_NORMAL);
   cv::resizeWindow("Image",960,536);
-   cv::namedWindow("Image1",cv::WINDOW_NORMAL);
+  cv::namedWindow("Image1",cv::WINDOW_NORMAL);
   cv::resizeWindow("Image1",960,536);
-   cv::namedWindow("Image2",cv::WINDOW_NORMAL);
+  cv::namedWindow("Image2",cv::WINDOW_NORMAL);
   cv::resizeWindow("Image2",960,536);
   cv::namedWindow("Out",cv::WINDOW_NORMAL);
   cv::resizeWindow("Out",960,536);
+  
   // Initialize variables to store the maps for stereo rectification
   cv::Mat Left_Stereo_Map1, Left_Stereo_Map2;
   cv::Mat Right_Stereo_Map1, Right_Stereo_Map2;
@@ -201,9 +231,7 @@ int main()
   cv::createTrackbar("disp12MaxDiff", "disparity", &disp12MaxDiff, 25, on_trackbar10);
   cv::createTrackbar("minDisparity", "disparity", &minDisparity, 25, on_trackbar11);
 
-  cv::Mat disp, disparity;
 
-  
   cv::Mat frameL,frameR;
   
   imgL = cv::imread("./Disparity_map/Set_2/calib_2cam_01_2/Test/1_left_eye.jpg"); //!!!!!!!!!!!!!!!!!!!!!!!
@@ -237,8 +265,8 @@ int main()
               cv::BORDER_CONSTANT,
               0);
    
-    cv::imwrite("./Disparity_map/Set_2/calib_2cam_01_2/Test/1_left_eye_stereo_nice.jpg", Left_nice);
-    cv::imwrite("./Disparity_map/Set_2/calib_2cam_03_2/Test/1_right_eye_stereo_nice.jpg", Right_nice);
+    //cv::imwrite("./Disparity_map/Set_2/calib_2cam_01_2/Test/1_left_eye_stereo_nice.jpg", Left_nice);
+    //cv::imwrite("./Disparity_map/Set_2/calib_2cam_03_2/Test/1_right_eye_stereo_nice.jpg", Right_nice);
  
 
  while(true)
@@ -270,5 +298,106 @@ int main()
     if (cv::waitKey(0) == 27) break;
     
   }
+  
+  //Read depth calibration files
+  
+  std::string folderL = "./Disparity_map/Depth_map/Depth_map_01/";
+  std::string folderR = "./Disparity_map/Depth_map/Depth_map_03/";
+  std::string suffix = ".jpg";
+  
+  // Inicialization of disparity window
+  cv::destroyAllWindows();
+  cv::namedWindow("disparity",cv::WINDOW_NORMAL);
+  cv::resizeWindow("disparity",600,600);
+  cv::setMouseCallback("disparity", mouseEvent, NULL);
+  
+  for(Z; Z<=300; Z+=50)
+  {
+	std::cout << "Z value:" << Z << "\n";
+	std::stringstream ss;
+	ss << Z;
+    
+	std::string number = ss.str();
+    std::string nameL = folderL + number + suffix;
+    std::string nameR = folderR + number + suffix;
+    
+	imgL = cv::imread(nameL);
+	cv::imshow("Image1",imgL);
+	imgR = cv::imread(nameR);
+	cv::imshow("Image2",imgR);
+    // Converting images to grayscale
+    cv::cvtColor(imgL, imgL_gray, cv::COLOR_BGR2GRAY);
+    cv::cvtColor(imgR, imgR_gray, cv::COLOR_BGR2GRAY);
+
+    // Initialize matrix for rectified stereo images
+    cv::Mat Left_nice, Right_nice;
+    // Applying stereo image rectification on the left image
+    cv::remap(imgL_gray,
+              Left_nice,
+              Left_Stereo_Map1,
+              Left_Stereo_Map2,
+              cv::INTER_LANCZOS4,
+              cv::BORDER_CONSTANT,
+              0);
+
+    // Applying stereo image rectification on the right image
+    cv::remap(imgR_gray,
+              Right_nice,
+              Right_Stereo_Map1,
+              Right_Stereo_Map2,
+              cv::INTER_LANCZOS4,
+              cv::BORDER_CONSTANT,
+              0);
+   
+    // Calculating disparith using the StereoBM algorithm
+    stereo->compute(Left_nice,Right_nice,disp);
+
+    // NOTE: Code returns a 16bit signed single channel image,
+		// CV_16S containing a disparity map scaled by 16. Hence it 
+    // is essential to convert it to CV_32F and scale it down 16 times.
+
+    // Converting disparity values to CV_32F from CV_16S
+ 
+    disp.convertTo(disparity,CV_32F, 1.0);
+
+    // Scaling down the disparity values and normalizing them 
+    disparity = (disparity/16.0f - (float)minDisparity)/((float)numDisparities);
+
+    // Displaying the disparity map
+    cv::imshow("disparity",disparity);
+    cv::waitKey(0);
+	std::cout << "um ciclo \n";
+    
+  }
+  std::cout << "aqui nao 0 \n";
+  std::cout << "z_vec size: " << z_vec.size()<< "\n";
+  std::cout << "z_vec size: " << z_vec.data() << "\n";
+  cv::Mat Z_mat(z_vec.size(), 1, CV_32F, z_vec.data());
+  cv::Mat coeff(z_vec.size(), 2, CV_32F, coeff_vec.data());
+
+  cv::Mat sol(2, 1, CV_32F);
+  float M;
+	std::cout << "aqui nao\n";
+  // Solving for M using least square fitting with QR decomposition method 
+  cv::solve(coeff, Z_mat, sol, cv::DECOMP_QR);
+	std::cout << "aqui nao 2\n";
+  M = sol.at<float>(0,0);
+	std::cout << "aqui nao 3\n";
+	std::cout << "M : " << M;
+  // Storing the updated value of M along with the stereo parameters
+  //cv::FileStorage cv_file3 = cv::FileStorage("../Disparity_map/Depth_map/depth_estimation_params_cpp.xml", cv::FileStorage::WRITE);
+  //cv_file3.write("numDisparities",numDisparities);
+  //cv_file3.write("blockSize",blockSize);
+  //cv_file3.write("preFilterType",preFilterType);
+  //cv_file3.write("preFilterSize",preFilterSize);
+  //cv_file3.write("preFilterCap",preFilterCap);
+  //cv_file3.write("textureThreshold",textureThreshold);
+  //cv_file3.write("uniquenessRatio",uniquenessRatio);
+  //cv_file3.write("speckleRange",speckleRange);
+  //cv_file3.write("speckleWindowSize",speckleWindowSize);
+  //cv_file3.write("disp12MaxDiff",disp12MaxDiff);
+  //cv_file3.write("minDisparity",minDisparity);
+  //cv_file3.write("M",M);
+  //cv_file3.release();
   return 0;
 }
