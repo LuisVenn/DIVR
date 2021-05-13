@@ -235,9 +235,11 @@ int main()
   cv::Mat frameL,frameR;
   
   imgL = cv::imread("./Disparity_map/Set_2/calib_2cam_01_2/Test/1_left_eye.jpg"); //!!!!!!!!!!!!!!!!!!!!!!!
+  //imgL = cv::imread("./Disparity_map/Depth_map/Depth_map_01/100.jpg");
   std::cout << "deu L\n";
   cv::imshow("Image1",imgL);
   imgR = cv::imread("./Disparity_map/Set_2/calib_2cam_03_2/Test/1_right_eye.jpg"); //!!!!!!!!!!!!!!!!!!!!!!!!
+  //imgR = cv::imread("./Disparity_map/Depth_map/Depth_map_03/100.jpg");
   std::cout << "Deu R\n";
   cv::imshow("Image2",imgR);
 
@@ -284,7 +286,16 @@ int main()
     disp.convertTo(disparity,CV_32F, 1.0);
 
     // Scaling down the disparity values and normalizing them 
+    std::cout << "numDisparities:" << numDisparities << "\n";
+    std::cout << "minDIsparity:" << minDisparity << "\n";
+    double Min2, Max2;
+	cv::minMaxLoc(disparity, &Min2, &Max2);
+    std::cout << "Max pre norm:" << Max2 << "\n";
+    std::cout << "Min pre norm:" << Min2 << "\n";
     disparity = (disparity/16.0f - (float)minDisparity)/((float)numDisparities);
+    cv::minMaxLoc(disparity, &Min2, &Max2);
+	std::cout << "Max pos norm:" << Max2 << "\n";
+    std::cout << "Min pos norm:" << Min2 << "\n";
 
     // Displaying the disparity map
     cv::imshow("disparity",disparity);
@@ -311,7 +322,7 @@ int main()
   cv::resizeWindow("disparity",600,600);
   cv::setMouseCallback("disparity", mouseEvent, NULL);
   
-  for(Z; Z<=300; Z+=50)
+  for(Z; Z<=250; Z+=50)
   {
 	std::cout << "Z value:" << Z << "\n";
 	std::stringstream ss;
@@ -361,6 +372,7 @@ int main()
     disp.convertTo(disparity,CV_32F, 1.0);
 
     // Scaling down the disparity values and normalizing them 
+
     disparity = (disparity/16.0f - (float)minDisparity)/((float)numDisparities);
 
     // Displaying the disparity map
@@ -372,32 +384,40 @@ int main()
   std::cout << "aqui nao 0 \n";
   std::cout << "z_vec size: " << z_vec.size()<< "\n";
   std::cout << "z_vec size: " << z_vec.data() << "\n";
+  for(int i{0}; i < z_vec.size();i++)
+  {
+	  std::cout << "z_vec[" << i << "] = " << z_vec[i] << "\n";
+	  std::cout << "coeff_vec[" << i << "] = " << coeff_vec[i] << "\n";
+  }
   cv::Mat Z_mat(z_vec.size(), 1, CV_32F, z_vec.data());
   cv::Mat coeff(z_vec.size(), 2, CV_32F, coeff_vec.data());
 
   cv::Mat sol(2, 1, CV_32F);
   float M;
+  float B;
 	std::cout << "aqui nao\n";
   // Solving for M using least square fitting with QR decomposition method 
   cv::solve(coeff, Z_mat, sol, cv::DECOMP_QR);
 	std::cout << "aqui nao 2\n";
   M = sol.at<float>(0,0);
+  B = sol.at<float>(1,0);
 	std::cout << "aqui nao 3\n";
-	std::cout << "M : " << M;
-  // Storing the updated value of M along with the stereo parameters
-  //cv::FileStorage cv_file3 = cv::FileStorage("../Disparity_map/Depth_map/depth_estimation_params_cpp.xml", cv::FileStorage::WRITE);
-  //cv_file3.write("numDisparities",numDisparities);
-  //cv_file3.write("blockSize",blockSize);
-  //cv_file3.write("preFilterType",preFilterType);
-  //cv_file3.write("preFilterSize",preFilterSize);
-  //cv_file3.write("preFilterCap",preFilterCap);
-  //cv_file3.write("textureThreshold",textureThreshold);
-  //cv_file3.write("uniquenessRatio",uniquenessRatio);
-  //cv_file3.write("speckleRange",speckleRange);
-  //cv_file3.write("speckleWindowSize",speckleWindowSize);
-  //cv_file3.write("disp12MaxDiff",disp12MaxDiff);
-  //cv_file3.write("minDisparity",minDisparity);
-  //cv_file3.write("M",M);
-  //cv_file3.release();
+	std::cout << "M : " << M <<"\n";
+	std::cout << "B : " << B;
+   //Storing the updated value of M along with the stereo parameters
+  cv::FileStorage cv_file3 = cv::FileStorage("./Disparity_map/Depth_map/depth_estimation_params_cpp.xml", cv::FileStorage::WRITE);
+  cv_file3.write("numDisparities",numDisparities);
+  cv_file3.write("blockSize",blockSize);
+  cv_file3.write("preFilterType",preFilterType);
+  cv_file3.write("preFilterSize",preFilterSize);
+  cv_file3.write("preFilterCap",preFilterCap);
+  cv_file3.write("textureThreshold",textureThreshold);
+  cv_file3.write("uniquenessRatio",uniquenessRatio);
+  cv_file3.write("speckleRange",speckleRange);
+  cv_file3.write("speckleWindowSize",speckleWindowSize);
+  cv_file3.write("disp12MaxDiff",disp12MaxDiff);
+  cv_file3.write("minDisparity",minDisparity);
+  cv_file3.write("sol",sol);
+  cv_file3.release();
   return 0;
 }
