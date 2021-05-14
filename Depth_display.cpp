@@ -7,10 +7,23 @@
 #include "opencv2/imgcodecs.hpp"
 
 //GOLBAL VARIABLES
-
-
- 
+  float m,b;
+  int numDisparities, minDisparity;
+   cv::Mat out;
+   cv::Mat disp, disparity, disparity_colour;
 //FUNCTIONS
+
+// Defining callback functions for mouse events
+void mouseEvent(int evt, int x, int y, int flags, void* param) {                    
+    float disp_val, depth_val;
+
+    if (evt == cv::EVENT_LBUTTONDOWN) {
+      disp_val  = disparity.at<float>(y,x);
+	  depth_val = m * (1/disp_val) + b ;
+	  
+	  std::cout << "Disparity = " << disp_val << " distancia = " << depth_val <<std::endl;  
+    }  
+}
 
 //Color map and color bar scale
 void color_map(cv::Mat& input /*CV_32FC1*/, cv::Mat& dest, int color_map){
@@ -38,10 +51,20 @@ void color_map(cv::Mat& input /*CV_32FC1*/, cv::Mat& dest, int color_map){
 
   //Scale
   cv::Mat num_window(cv::Size(num_bar_w, input.rows), CV_8UC3, cv::Scalar(255,255,255));
-  for(int i=0; i<=8; i++){
-      int j=i*input.rows/8;
-      float value = (Max/8)*i;
-      cv::putText(num_window, std::to_string(value), cv::Point(5, num_window.rows-j-5),cv::FONT_HERSHEY_SIMPLEX, 0.6 , cv::Scalar(0,0,0), 1 , 2 , false);
+  for(int i=0; i<5; i++){
+      int j=i*num_window.rows/4;
+      float dispa = 0.2*i;
+      float value; 
+      if (dispa > 0) {
+		  value = round(m*(1/dispa) + b);
+      }else {
+		  value = round(m*(1/((float)minDisparity/((float)minDisparity + (float)numDisparities)))+b); 
+      }
+      
+      if (i == 0) j += 15;
+      if (i == 4) j -= 5;
+		  
+      cv::putText(num_window, std::to_string(value), cv::Point(5, j),cv::FONT_HERSHEY_SIMPLEX, 0.6 , cv::Scalar(0,0,0), 1 , 2 , false);
   }
 
   //color bar
@@ -49,7 +72,7 @@ void color_map(cv::Mat& input /*CV_32FC1*/, cv::Mat& dest, int color_map){
   cv::Mat cb;
   for(int i=0; i<color_bar.rows; i++){
     for(int j=0; j<color_bar_w; j++){
-      int v=255-255*i/color_bar.rows;
+      int v=255*i/color_bar.rows;
       color_bar.at<cv::Vec3b>(i,j)=cv::Vec3b(v,v,v);
     }
   }
@@ -68,8 +91,13 @@ int main()
   cv::resizeWindow("Image1",960,536);
   cv::namedWindow("Image2",cv::WINDOW_NORMAL);
   cv::resizeWindow("Image2",960,536);
+  
+  cv::namedWindow("Colour",cv::WINDOW_NORMAL);
+  cv::resizeWindow("Colour",960,536);
+
   cv::namedWindow("Out",cv::WINDOW_NORMAL);
   cv::resizeWindow("Out",960,536);
+  cv::setMouseCallback("Out", mouseEvent, NULL);
   
   // Initialize variables to store the maps for stereo rectification
   cv::Mat Left_Stereo_Map1, Left_Stereo_Map2;
@@ -84,7 +112,7 @@ int main()
   cv_file2.release();
 
   // initialize values for StereoSGBM parameters
-  int numDisparities, blockSize, minDisparity, speckleRange, speckleWindowSize, disp12MaxDiff, preFilterType, preFilterSize, preFilterCap, textureThreshold,uniquenessRatio;
+  int blockSize, speckleRange, speckleWindowSize, disp12MaxDiff, preFilterType, preFilterSize, preFilterCap, textureThreshold,uniquenessRatio;
   cv::Mat sol(2, 1, CV_32F);
 
   // Reading the disparity parameters
@@ -104,6 +132,7 @@ int main()
   cv_file3.release();
   std::cout << "numDisparities:" << numDisparities << "\n";
   std::cout << "blocksize:" << blockSize<< "\n";
+  
   // Creating an object of StereoSGBM algorithm
   cv::Ptr<cv::StereoBM> stereo = cv::StereoBM::create();
   
@@ -123,25 +152,26 @@ int main()
 
 
   //Set values for depth estimation
-  float m,b;
+
   
   m = sol.at<float>(0,0);
   b = sol.at<float>(1,0);
-  
+  	std::cout << "M : " << m <<"\n";
+	std::cout << "B : " << b;
   //Read images
   cv::Mat imgL;
   cv::Mat imgR;
   cv::Mat imgL_gray;
   cv::Mat imgR_gray;
-  cv::Mat disp, disparity;
+  
   
   imgL = cv::imread("./Disparity_map/Depth_map/Depth_map_01/100.jpg");
-  std::cout << "deu L\n";
-  cv::imshow("Image1",imgL);
+  //std::cout << "deu L\n";
+  //cv::imshow("Image1",imgL);
 
   imgR = cv::imread("./Disparity_map/Depth_map/Depth_map_03/100.jpg");
-  std::cout << "Deu R\n";
-  cv::imshow("Image2",imgR);
+  //std::cout << "Deu R\n";
+  //cv::imshow("Image2",imgR);
   
   // Converting images to grayscale
   cv::cvtColor(imgL, imgL_gray, cv::COLOR_BGR2GRAY);
@@ -170,15 +200,15 @@ int main()
  // Calculating disparith using the StereoBM algorithm
  stereo->compute(Left_nice,Right_nice,disp);
  disp.convertTo(disparity,CV_32F, 1.0);
- 
+ disp.convertTo(disparity_colour,CV_32F, 1.0);
  // Scaling down the disparity values and normalizing them 
  disparity = (disparity/16.0f - (float)minDisparity)/((float)numDisparities);
-
+ disparity_colour = (disparity_colour/16.0f - (float)minDisparity)/((float)numDisparities);
  // Displaying the colour disparity map with scale
    
- cv::Mat out;
- color_map(disparity, out, cv::COLORMAP_JET);
- cv::imshow("Out",out);
+ color_map(disparity_colour, out, cv::COLORMAP_JET);
+ cv::imshow("Out",disparity);
+ cv::imshow("Colour",out);
  cv::waitKey(0);
  return 0;
 

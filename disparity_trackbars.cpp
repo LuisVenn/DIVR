@@ -55,7 +55,7 @@ void color_map(cv::Mat& input /*CV_32FC1*/, cv::Mat& dest, int color_map){
 }
 
 // initialize values for StereoSGBM parameters
-int numDisparities = 13;
+int numDisparities = 208;
 int blockSize = 7;
 int preFilterType = 1;
 int preFilterSize = 1;
@@ -65,7 +65,7 @@ int textureThreshold = 10;
 int uniquenessRatio = 15;
 int speckleRange = 0;
 int speckleWindowSize = 0;
-int disp12MaxDiff = -1;
+int disp12MaxDiff = 0;
 int dispType = CV_16S;
 
 
@@ -76,7 +76,7 @@ cv::Mat imgL;
 cv::Mat imgR;
 cv::Mat imgL_gray;
 cv::Mat imgR_gray;
- cv::Mat disp, disparity;
+ cv::Mat disp, disparity, disparity2;
   
 // Calc matrix M
 std::vector<float> z_vec;
@@ -92,16 +92,17 @@ int Z = 50;
 
 // Defining callback functions for mouse events
 void mouseEvent(int evt, int x, int y, int flags, void* param) {                    
-    float depth_val;
+    float depth_val, depth_val2;
 
     if (evt == cv::EVENT_LBUTTONDOWN) {
       depth_val  = disparity.at<float>(y,x);
-
-      if (depth_val > 0)
+	  depth_val2 = disparity2.at<float>(y,x);
+	  std::cout << "Registei um ponto com Z = " << Z << ", com disparidade " << depth_val << " equivalente a " << depth_val2 << " pixels" <<std::endl;  
+      if (depth_val > 0 and cv::waitKey(0) == 32)
       {
         z_vec.push_back(Z);
         coeff_vec.push_back(cv::Point2f(1.0f/(float)depth_val, 1.0f));
-        std::cout << "Registei um ponto com Z =" << Z << "com disparidade =" << depth_val << "\n";  
+        std::cout << "Guardado" <<std::endl;  
         
       }
     }  
@@ -165,7 +166,8 @@ static void on_trackbar10( int, void* )
 
 static void on_trackbar11( int, void* )
 {
-  stereo->setMinDisparity(minDisparity);
+  stereo->setMinDisparity(minDisparity+1);
+  minDisparity+=1;
 }
 
 
@@ -290,9 +292,11 @@ int main()
     std::cout << "minDIsparity:" << minDisparity << "\n";
     double Min2, Max2;
 	cv::minMaxLoc(disparity, &Min2, &Max2);
-    std::cout << "Max pre norm:" << Max2 << "\n";
-    std::cout << "Min pre norm:" << Min2 << "\n";
-    disparity = (disparity/16.0f - (float)minDisparity)/((float)numDisparities);
+    std::cout << "Max pre norm:" << Max2/16 << "\n";
+    std::cout << "Min pre norm:" << Min2/16 << "\n";
+    
+    disparity = (disparity/16.0f)/((float)numDisparities + (float)minDisparity);
+    
     cv::minMaxLoc(disparity, &Min2, &Max2);
 	std::cout << "Max pos norm:" << Max2 << "\n";
     std::cout << "Min pos norm:" << Min2 << "\n";
@@ -370,20 +374,17 @@ int main()
     // Converting disparity values to CV_32F from CV_16S
  
     disp.convertTo(disparity,CV_32F, 1.0);
+   
 
     // Scaling down the disparity values and normalizing them 
-
-    disparity = (disparity/16.0f - (float)minDisparity)/((float)numDisparities);
+	disparity2 = disparity/16.0f;
+    disparity = (disparity/16.0f)/((float)minDisparity + (float)numDisparities);
 
     // Displaying the disparity map
     cv::imshow("disparity",disparity);
     cv::waitKey(0);
-	std::cout << "um ciclo \n";
     
   }
-  std::cout << "aqui nao 0 \n";
-  std::cout << "z_vec size: " << z_vec.size()<< "\n";
-  std::cout << "z_vec size: " << z_vec.data() << "\n";
   for(int i{0}; i < z_vec.size();i++)
   {
 	  std::cout << "z_vec[" << i << "] = " << z_vec[i] << "\n";
@@ -395,15 +396,14 @@ int main()
   cv::Mat sol(2, 1, CV_32F);
   float M;
   float B;
-	std::cout << "aqui nao\n";
   // Solving for M using least square fitting with QR decomposition method 
   cv::solve(coeff, Z_mat, sol, cv::DECOMP_QR);
-	std::cout << "aqui nao 2\n";
   M = sol.at<float>(0,0);
   B = sol.at<float>(1,0);
-	std::cout << "aqui nao 3\n";
-	std::cout << "M : " << M <<"\n";
-	std::cout << "B : " << B;
+  
+	std::cout << "M : " << M << std::endl;
+	std::cout << "B : " << B << std::endl;
+   
    //Storing the updated value of M along with the stereo parameters
   cv::FileStorage cv_file3 = cv::FileStorage("./Disparity_map/Depth_map/depth_estimation_params_cpp.xml", cv::FileStorage::WRITE);
   cv_file3.write("numDisparities",numDisparities);
