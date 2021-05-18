@@ -17,7 +17,7 @@ int main()
 	//READ XML FILE
 	
     
-    cv::FileStorage fs("./Disparity_map/Depth_map/Vertical_Curve/verticalcurve_cam_stereo_params_3.xml", cv::FileStorage::READ);
+    cv::FileStorage fs("./Disparity_map/Depth_map/Vertical_Curve/verticalcurveborder_cam_stereo_params_3.xml", cv::FileStorage::READ);
     
 	cv::Mat Left_Stereo_Map1, Left_Stereo_Map2;
 	cv::Mat Right_Stereo_Map1, Right_Stereo_Map2;
@@ -45,8 +45,8 @@ cv::Mat frameL,frameR;
   cv::Mat frameL_border,frameR_border;
   int top, bottom, left, right; 
   int borderType = cv::BORDER_CONSTANT;
-  top = (int) (0.10*frameL.rows); bottom = top;
-  left = (int) (0.10*frameL.cols); right = left;
+  top = (int) (0.05*frameL.rows); bottom = top;
+  left = (int) (0.05*frameL.cols); right = left;
   int no = 0;
   cv::Scalar value(255,255,255);
   

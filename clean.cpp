@@ -388,8 +388,8 @@ static int parseCmdArgs(int argc, char** argv) // LER AS FUNCOES DA COMMANDLINE
 }
 
 
-int frame_width = 1228;//4621;//1017;//1033;//result.size().width;
-int frame_height = 1838;//1516;//1554;result.size().height;
+int frame_width = 195;//1228;//4621;//1017;//1033;//result.size().width;
+int frame_height = 253;//1838;//1516;//1554;result.size().height;
 cv::VideoWriter output("out.avi",cv::VideoWriter::fourcc('M','J','P','G'),30,cv::Size(frame_width,frame_height));
 
 
@@ -944,10 +944,12 @@ int main(int argc, char* argv[]) //**************MAIN*********************
 //volta a ler as imagens e fzr um ciclo entre elas 
 //em cima a frame deveria ser guardada para ser agora usada
 		Mat result_8Bit;
-		while(1) //cap2.isOpened()
+		int totframe = 0;
+		
+		while(cap1.isOpened()) //cap2.isOpened()
 		{
 			#if ENABLE_LOG
-				t = getTickCount();
+				int64 tframe = getTickCount();
 			#endif
 			cout << "************** NEXT FRAME PAIR ****************\n\n";
 			for (int img_idx = 0; img_idx < num_images; ++img_idx)
@@ -1005,7 +1007,7 @@ int main(int argc, char* argv[]) //**************MAIN*********************
 									
 				}		
 				
-				if (!is_compose_scale_set) //so entra aqui 1 x
+				if(0)//if (!is_compose_scale_set) //so entra aqui 1 x
 				{
 					cout<< "Setting compose scale...\n";
 					if (compose_megapix > 0)
@@ -1017,7 +1019,7 @@ int main(int argc, char* argv[]) //**************MAIN*********************
 					compose_work_aspect = compose_scale / work_scale;
 
 					// Update warped image scale
-					warped_image_scale *= static_cast<float>(compose_work_aspect);
+					warped_image_scale *= static_cast<float>(compose_work_aspect); 
 					warper = warper_creator->create(warped_image_scale);
 
 					// Update corners and sizes
@@ -1055,24 +1057,38 @@ int main(int argc, char* argv[]) //**************MAIN*********************
 
 				// Warp the current image
 				cout << "Warping image...\n";
+				#if ENABLE_LOG
+				int64 twarpi = getTickCount();
+				#endif
 				warper->warp(img, K, cameras[img_idx].R, INTER_LINEAR, BORDER_REFLECT, img_warped);
-
+				//imshow("img",img);
+				//waitKey();
+				//imshow("img warped",img_warped);
+				//waitKey();
+				LOGLN("Warp image finished, total time: " << ((getTickCount() - twarpi) / getTickFrequency()) << " sec");
+				
 				// Warp the current image mask
 				mask.create(img_size, CV_8U);
 				mask.setTo(Scalar::all(255));
+				
 				cout << "Warping mask...\n";
+				#if ENABLE_LOG
+				int64 twarpm = getTickCount();
+				#endif
 				warper->warp(mask, K, cameras[img_idx].R, INTER_NEAREST, BORDER_CONSTANT, mask_warped);
+				LOGLN("Warp image finished, total time: " << ((getTickCount() - twarpm) / getTickFrequency()) << " sec");
+				
 				
 				// Compensate exposure
 				cout << "Compensating exposure...\n";
-				compensator->apply(img_idx, corners[img_idx], img_warped, mask_warped);
-				img_warped.convertTo(img_warped_s, CV_16S);
-				img_warped.release();
-				img.release();
-				mask.release();
-				dilate(masks_warped[img_idx], dilated_mask, Mat());
-				resize(dilated_mask, seam_mask, mask_warped.size(), 0, 0, INTER_LINEAR_EXACT);
-				mask_warped = seam_mask & mask_warped;
+				//compensator->apply(img_idx, corners[img_idx], img_warped, mask_warped);
+				//img_warped.convertTo(img_warped_s, CV_16S);
+				//img_warped.release();
+				//img.release();
+				//mask.release();
+				//dilate(masks_warped[img_idx], dilated_mask, Mat());
+				//resize(dilated_mask, seam_mask, mask_warped.size(), 0, 0, INTER_LINEAR_EXACT);
+				//mask_warped = seam_mask & mask_warped;
 				
 				if (!blender && !timelapse)
 				{
@@ -1129,7 +1145,6 @@ int main(int argc, char* argv[]) //**************MAIN*********************
 				cout << "Blending...\n";
 				Mat result, result_mask;
 				blender->blend(result, result_mask);
-				LOGLN("Compositing, time: " << ((getTickCount() - t) / getTickFrequency()) << " sec");
 				result.convertTo(result_8Bit, CV_8U);
 				cout << "height:" << result_8Bit.size().height << "\n";
 				cout << "width:" << result_8Bit.size().width << "\n";
@@ -1138,12 +1153,25 @@ int main(int argc, char* argv[]) //**************MAIN*********************
 				//imwrite(result_name, result);
 			}
 
-			LOGLN("Frame finished, total time: " << ((getTickCount() - t) / getTickFrequency()) << " sec");
+			LOGLN("Frame finished, total time: " << ((getTickCount() - tframe) / getTickFrequency()) << " sec");
+			LOGLN("Total time: " << ((getTickCount() - t) / getTickFrequency()) << " sec");
+			totframe++;
+			cout << "Total frames:" << totframe << " frames\n";
+			cout << "Total output processed: " << (totframe/30) << " sec\n";
 			blender.release();
 		}
 	
+	LOGLN("Process completed, total processing time: " << (((getTickCount() - t) / getTickFrequency())/60) << " min");
+	LOGLN("Output total time: " << (totframe/30) << " sec");
+	
 	cap1.release();
 	cap2.release();
+	cap3.release();
+	cap4.release();
+	cap5.release();
+	cap6.release();
+	cap7.release();
+	cap8.release();
 	output.release();
 	destroyAllWindows();
 	return 0;

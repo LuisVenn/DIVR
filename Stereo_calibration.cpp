@@ -42,12 +42,13 @@ std::string pathR = "./Disparity_map/Depth_map/Vertical_Curve/StereoCalib_R_2/*.
 cv::glob(pathL, imagesL);
 cv::glob(pathR, imagesR);
 
-cv::Mat frameL, frameR, grayL, grayR;
+cv::Mat frameL, frameR, grayL, grayR,croppedL,croppedR;
 // vector to store the pixel coordinates of detected checker board corners 
 std::vector<cv::Point2f> corner_ptsL, corner_ptsR;
 bool successL, successR;
 
 // Looping over all the images in the directory
+cv::Mat frameL_border,frameR_border;
 for(int i{0}; i<imagesL.size(); i++)
 {
   cv::namedWindow("ImageL",cv::WINDOW_NORMAL);
@@ -60,13 +61,20 @@ for(int i{0}; i<imagesL.size(); i++)
 
   frameR = cv::imread(imagesR[i]);
   //cv::cvtColor(frameR,grayR,cv::COLOR_BGR2GRAY);
+  //int x = frameL.cols/3;
+  //cv::Range cols(x*2, frameL.cols);
+  //cv::Range rows(0, frameL.rows);
+  //cv::Mat croppedL = frameL(rows, cols);
   
-  // Initialize arguments for the filter
-  cv::Mat frameL_border,frameR_border;
+  //cv::Range cols2(0, x);
+  //croppedL = frameL(rows, cols);
+  //croppedR = frameR(rows, cols2);
+  //Initialize arguments for the filter
+  
   int top, bottom, left, right; 
   int borderType = cv::BORDER_CONSTANT;
-  top = (int) (0.10*frameL.rows); bottom = top;
-  left = (int) (0.10*frameL.cols); right = left;
+  top = (int) (0.05*frameL.rows); bottom = top;
+  left = (int) (0.05*frameL.cols); right = left;
   int no = 0;
   cv::Scalar value(255,255,255);
   
@@ -109,11 +117,12 @@ for(int i{0}; i<imagesL.size(); i++)
     objpoints.push_back(objp);
     imgpointsL.push_back(corner_ptsL);
     imgpointsR.push_back(corner_ptsR);
+    std::cout << "Sucess" << std::endl;
   }
 
   cv::imshow("ImageL",frameL_border);
   cv::imshow("ImageR",frameR_border);
-  cv::waitKey(0);
+  //cv::waitKey(0);
   cv::destroyAllWindows();
 }
 
@@ -222,7 +231,7 @@ cv::initUndistortRectifyMap(new_mtxR,
                             Right_Stereo_Map1,
                             Right_Stereo_Map2);
 
-cv::FileStorage cv_file = cv::FileStorage("./Disparity_map/Depth_map/Vertical_Curve/verticalcurve_border_cam_stereo_params_3.xml", cv::FileStorage::WRITE);
+cv::FileStorage cv_file = cv::FileStorage("./Disparity_map/Depth_map/Vertical_Curve/verticalcurveborder_cam_stereo_params_3.xml", cv::FileStorage::WRITE);
 cv_file.write("Left_Stereo_Map_x",Left_Stereo_Map1);
 cv_file.write("Left_Stereo_Map_y",Left_Stereo_Map2);
 cv_file.write("Right_Stereo_Map_x",Right_Stereo_Map1);
@@ -233,13 +242,13 @@ cv_file.write("Right_Stereo_Map_y",Right_Stereo_Map2);
   cv::resizeWindow("Left image before rectification",960,536);
   cv::namedWindow("Right image before rectification",cv::WINDOW_NORMAL);
   cv::resizeWindow("Right image before rectification",960,536);
-cv::imshow("Left image before rectification",frameL);
-cv::imshow("Right image before rectification",frameR);
+cv::imshow("Left image before rectification",frameL_border);
+cv::imshow("Right image before rectification",frameR_border);
 
 cv::Mat Left_nice, Right_nice;
 
 // Apply the calculated maps for rectification and undistortion 
-cv::remap(frameL,
+cv::remap(frameL_border,
           Left_nice,
           Left_Stereo_Map1,
           Left_Stereo_Map2,
@@ -247,7 +256,7 @@ cv::remap(frameL,
           cv::BORDER_CONSTANT,
           0);
 
-cv::remap(frameR,
+cv::remap(frameR_border,
           Right_nice,
           Right_Stereo_Map1,
           Right_Stereo_Map2,
@@ -264,22 +273,22 @@ cv::imshow("Right image after rectification",Right_nice);
 
 cv::waitKey(0);
 
-cv::Mat Left_nice_split[3], Right_nice_split[3];
+//cv::Mat Left_nice_split[3], Right_nice_split[3];
 
-std::vector<cv::Mat> Anaglyph_channels;
+//std::vector<cv::Mat> Anaglyph_channels;
 
-cv::split(Left_nice, Left_nice_split);
-cv::split(Right_nice, Right_nice_split);
+//cv::split(Left_nice, Left_nice_split);
+//cv::split(Right_nice, Right_nice_split);
 
-Anaglyph_channels.push_back(Right_nice_split[0]);
-Anaglyph_channels.push_back(Right_nice_split[1]);
-Anaglyph_channels.push_back(Left_nice_split[2]);
+//Anaglyph_channels.push_back(Right_nice_split[0]);
+//Anaglyph_channels.push_back(Right_nice_split[1]);
+//Anaglyph_channels.push_back(Left_nice_split[2]);
 
-cv::Mat Anaglyph_img;
+//cv::Mat Anaglyph_img;
 
-cv::merge(Anaglyph_channels, Anaglyph_img);
+//cv::merge(Anaglyph_channels, Anaglyph_img);
 
-cv::imshow("Anaglyph image", Anaglyph_img);
-cv::waitKey(0);
-
+//cv::imshow("Anaglyph image", Anaglyph_img);
+//cv::waitKey(0);
+return 0;
 }
