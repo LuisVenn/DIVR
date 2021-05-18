@@ -18,6 +18,7 @@ int CHECKERBOARD[2]{6,9};
 
 int main()
 {
+  
 // Creating vector to store vectors of 3D points for each checkerboard image
 std::vector<std::vector<cv::Point3f> > objpoints;
 
@@ -35,8 +36,8 @@ for(int i{0}; i<CHECKERBOARD[1]; i++)
 // Extracting path of individual image stored in a given directory
 std::vector<cv::String> imagesL, imagesR;
 // Path of the folder containing checkerboard images
-std::string pathL = "./calib_2cam_01_2/Ind_Calibrated/*.jpg"; //!!!!!!!!!!!!!!!!!!!!
-std::string pathR = "./calib_2cam_03_2/Ind_Calibrated/*.jpg"; //!!!!!!!!!!!!!!!!!!!!!!!
+std::string pathL = "./Disparity_map/Depth_map/Vertical_Curve/StereoCalib_L_2/*.jpg"; //!!!!!!!!!!!!!!!!!!!!
+std::string pathR = "./Disparity_map/Depth_map/Vertical_Curve/StereoCalib_R_2/*.jpg"; //!!!!!!!!!!!!!!!!!!!!!!!
 
 cv::glob(pathL, imagesL);
 cv::glob(pathR, imagesR);
@@ -49,12 +50,32 @@ bool successL, successR;
 // Looping over all the images in the directory
 for(int i{0}; i<imagesL.size(); i++)
 {
+  cv::namedWindow("ImageL",cv::WINDOW_NORMAL);
+  cv::resizeWindow("ImageL",960,536);
+  cv::namedWindow("ImageR",cv::WINDOW_NORMAL);
+  cv::resizeWindow("ImageR",960,536);
+  
   frameL = cv::imread(imagesL[i]);
-  cv::cvtColor(frameL,grayL,cv::COLOR_BGR2GRAY);
+  //cv::cvtColor(frameL,grayL,cv::COLOR_BGR2GRAY);
 
   frameR = cv::imread(imagesR[i]);
-  cv::cvtColor(frameR,grayR,cv::COLOR_BGR2GRAY);
+  //cv::cvtColor(frameR,grayR,cv::COLOR_BGR2GRAY);
+  
+  // Initialize arguments for the filter
+  cv::Mat frameL_border,frameR_border;
+  int top, bottom, left, right; 
+  int borderType = cv::BORDER_CONSTANT;
+  top = (int) (0.10*frameL.rows); bottom = top;
+  left = (int) (0.10*frameL.cols); right = left;
+  int no = 0;
+  cv::Scalar value(255,255,255);
+  
+//Create Border
+  copyMakeBorder( frameL, frameL_border, top, bottom, left, right, borderType, value );
+  copyMakeBorder( frameR, frameR_border, top, bottom, left, left, borderType, value );
 
+  cv::cvtColor(frameL_border,grayL,cv::COLOR_BGR2GRAY);
+  cv::cvtColor(frameR_border,grayR,cv::COLOR_BGR2GRAY);
   // Finding checker board corners
   // If desired number of corners are found in the image then success = true  
   successL = cv::findChessboardCorners(
@@ -82,16 +103,16 @@ for(int i{0}; i<imagesL.size(); i++)
     cv::cornerSubPix(grayR,corner_ptsR,cv::Size(11,11), cv::Size(-1,-1),criteria);
 
     // Displaying the detected corner points on the checker board
-    cv::drawChessboardCorners(frameL, cv::Size(CHECKERBOARD[0],CHECKERBOARD[1]), corner_ptsL,successL);
-    cv::drawChessboardCorners(frameR, cv::Size(CHECKERBOARD[0],CHECKERBOARD[1]), corner_ptsR,successR);
+    cv::drawChessboardCorners(frameL_border, cv::Size(CHECKERBOARD[0],CHECKERBOARD[1]), corner_ptsL,successL);
+    cv::drawChessboardCorners(frameR_border, cv::Size(CHECKERBOARD[0],CHECKERBOARD[1]), corner_ptsR,successR);
 
     objpoints.push_back(objp);
     imgpointsL.push_back(corner_ptsL);
     imgpointsR.push_back(corner_ptsR);
   }
 
-  cv::imshow("ImageL",frameL);
-  cv::imshow("ImageR",frameR);
+  cv::imshow("ImageL",frameL_border);
+  cv::imshow("ImageR",frameR_border);
   cv::waitKey(0);
   cv::destroyAllWindows();
 }
@@ -201,14 +222,17 @@ cv::initUndistortRectifyMap(new_mtxR,
                             Right_Stereo_Map1,
                             Right_Stereo_Map2);
 
-cv::FileStorage cv_file = cv::FileStorage("cam_stereo_params_2.xml", cv::FileStorage::WRITE);
+cv::FileStorage cv_file = cv::FileStorage("./Disparity_map/Depth_map/Vertical_Curve/verticalcurve_border_cam_stereo_params_3.xml", cv::FileStorage::WRITE);
 cv_file.write("Left_Stereo_Map_x",Left_Stereo_Map1);
 cv_file.write("Left_Stereo_Map_y",Left_Stereo_Map2);
 cv_file.write("Right_Stereo_Map_x",Right_Stereo_Map1);
 cv_file.write("Right_Stereo_Map_y",Right_Stereo_Map2); 
 
 //Apply retifications
-
+  cv::namedWindow("Left image before rectification",cv::WINDOW_NORMAL);
+  cv::resizeWindow("Left image before rectification",960,536);
+  cv::namedWindow("Right image before rectification",cv::WINDOW_NORMAL);
+  cv::resizeWindow("Right image before rectification",960,536);
 cv::imshow("Left image before rectification",frameL);
 cv::imshow("Right image before rectification",frameR);
 
@@ -231,7 +255,10 @@ cv::remap(frameR,
           cv::BORDER_CONSTANT,
           0);
 
-
+  cv::namedWindow("Left image after rectification",cv::WINDOW_NORMAL);
+  cv::resizeWindow("Left image after rectification",960,536);
+  cv::namedWindow("Right image after rectification",cv::WINDOW_NORMAL);
+  cv::resizeWindow("Right image after rectification",960,536);
 cv::imshow("Left image after rectification",Left_nice);
 cv::imshow("Right image after rectification",Right_nice);
 
@@ -246,7 +273,7 @@ cv::split(Right_nice, Right_nice_split);
 
 Anaglyph_channels.push_back(Right_nice_split[0]);
 Anaglyph_channels.push_back(Right_nice_split[1]);
-Anaglyph_channels.push_back(Left_nice_split[r2]);
+Anaglyph_channels.push_back(Left_nice_split[2]);
 
 cv::Mat Anaglyph_img;
 
