@@ -160,7 +160,7 @@ cv::Mat horizontal_stitching(cv::Mat &img1, cv::Mat &img2)
 	//cv::Size output_size(img1.rows, output_width);
 	cv::Mat output = img1.clone();
 	
-	//Create buffe
+	//Create buffer
 	int right = img2.cols - avg;
     int borderType = cv::BORDER_CONSTANT;
     int no = 0;
@@ -170,6 +170,55 @@ cv::Mat horizontal_stitching(cv::Mat &img1, cv::Mat &img2)
 	copyMakeBorder( img1, output, no, no, no, right, borderType, value );
 	
 	img2.copyTo(output(cv::Rect(img1.cols-avg,0,img2.cols,img2.rows)));
+	
+	
+	return output;
+}
+
+cv::Mat horizontal_line_stitching(cv::Mat &img1, cv::Mat &img2)
+{
+	vector<Point2f> corners1, corners2;
+	
+	bool found1 = cv::findChessboardCorners(img1, patternSize, corners1);
+	bool found2 = cv::findChessboardCorners(img2, patternSize, corners2);
+	
+	float sum=0;
+	
+	for(int i=0; i<corners1.size(); i++)
+	{
+		sum += img1.cols - corners1[i].x + corners2[i].x;
+		//std::cout << "1x: " << corners1[i].x << "2x: " << corners2[i].x << std::endl;
+		//std::cout << "diffx: " << corners1[i].x - corners2[i].x << std::endl;
+	}
+	int avg = round(sum/corners1.size());
+	std::cout << avg << std::endl;
+	//int output_width = img1.cols + img2.cols - avg + 100; 
+	//cv::Size output_size(img1.rows, output_width);
+	cv::Mat output = img1.clone();
+	
+	//Create buffer
+	int right = img2.cols - avg;
+    int borderType = cv::BORDER_CONSTANT;
+    int no = 0;
+    cv::Scalar value(255,255,255);
+  
+	//Create Border
+	copyMakeBorder( img1, output, no, no, no, right, borderType, value );
+	int gap = 30;
+	int line = round((img2.rows/gap));
+	int remainder = round((img2.rows % gap)); 	
+	
+	for(int i=0; i<line-1; i++)
+	{
+		//if(i == line-1)
+		//{
+			//gap = remainder;
+		//}
+		avg	+= 2;
+		//avg = rand() % 50 + 150;
+		img2(cv::Rect(0,i*gap,img2.cols,gap)).copyTo(output(cv::Rect(img1.cols-avg,i*gap,img2.cols,gap)));
+	}
+	
 	
 	return output;
 }
@@ -226,6 +275,9 @@ int main()
 		cv::Range cols2(0, x);
 		img1_crop = img1(rows, cols);
 		img2_crop = img2(rows, cols2);
+		
+		//img1_crop = img1.clone();
+		//img2_crop = img2.clone();
 
 		left2rightplane(img1_crop,img2_crop, img1_crop_warp);
         std::cout << "feito" << std::endl;
@@ -236,7 +288,8 @@ int main()
         
         draw_grid(img_matches);
         
-        cv::Mat img_horz = horizontal_stitching(img1_crop_warp, img2_vert_allig);
+        //cv::Mat img_horz = horizontal_stitching(img1_crop_warp, img2_vert_allig);
+        cv::Mat img_horz = horizontal_line_stitching(img1_crop_warp, img2_vert_allig);
         
 		cv::imshow("Left image before rectification",img1_crop);
 		cv::imshow("Right image before rectification",img2_crop);
