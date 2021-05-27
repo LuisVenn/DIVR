@@ -16,7 +16,7 @@ using namespace cv;
 using namespace cv::detail;
 
 cv::Size patternSize(6,9);
-cv::Mat img1, img2, img1_crop, img2_crop, img1_crop_warp,img_matches;
+cv::Mat img1, img2, img1_crop, img2_crop, img1_crop_warp,img_matches, img2_vert_allig;
 
 void left2rightplane(cv::Mat &img1, cv::Mat &img2, cv::Mat &img1_warp)
 {
@@ -109,7 +109,7 @@ void match_features(cv::Mat &img1, cv::Mat &img2, cv::Mat &output)
 	cv::drawMatches(img1, keypoints1, img2, keypoints2, match1, output);
 }
 
-void vertically_allign(cv::Mat &img1, cv::Mat &img2)
+void vertically_allign(cv::Mat &img1, cv::Mat &img2, cv::Mat &output)
 {
 	vector<Point2f> corners1, corners2;
 	
@@ -125,19 +125,53 @@ void vertically_allign(cv::Mat &img1, cv::Mat &img2)
 	int avg = round(sum/corners1.size());
 	
 	//Create buffer
-	cv::Mat frameL_border,frameR_border;
 	int bottom = avg;
     int borderType = cv::BORDER_CONSTANT;
     int no = 0;
     cv::Scalar value(255,255,255);
   
 	//Create Border
-	copyMakeBorder( img2, img2, no, bottom, no, no, borderType, value );
+	copyMakeBorder( img2, output, no, bottom, no, no, borderType, value );
 	
 	//Translation
 	cv::Mat T = (Mat_<double>(3,3) << 1, 0, 0 , 0, 1, avg, 0, 0, 1);
-	cv::warpPerspective(img2, img2, T, img2.size());
+	cv::warpPerspective(output, output, T, output.size());
 	  
+}
+
+cv::Mat horizontal_stitching(cv::Mat &img1, cv::Mat &img2)
+{
+	vector<Point2f> corners1, corners2;
+	
+	bool found1 = cv::findChessboardCorners(img1, patternSize, corners1);
+	bool found2 = cv::findChessboardCorners(img2, patternSize, corners2);
+	
+	float sum=0;
+	
+	for(int i=0; i<corners1.size(); i++)
+	{
+		sum += img1.cols - corners1[i].x + corners2[i].x;
+		//std::cout << "1x: " << corners1[i].x << "2x: " << corners2[i].x << std::endl;
+		//std::cout << "diffx: " << corners1[i].x - corners2[i].x << std::endl;
+	}
+	int avg = round(sum/corners1.size());
+	std::cout << avg << std::endl;
+	//int output_width = img1.cols + img2.cols - avg + 100; 
+	//cv::Size output_size(img1.rows, output_width);
+	cv::Mat output = img1.clone();
+	
+	//Create buffe
+	int right = img2.cols - avg;
+    int borderType = cv::BORDER_CONSTANT;
+    int no = 0;
+    cv::Scalar value(255,255,255);
+  
+	//Create Border
+	copyMakeBorder( img1, output, no, no, no, right, borderType, value );
+	
+	img2.copyTo(output(cv::Rect(img1.cols-avg,0,img2.cols,img2.rows)));
+	
+	return output;
 }
 
 void draw_grid(cv::Mat &mat)
@@ -196,15 +230,17 @@ int main()
 		left2rightplane(img1_crop,img2_crop, img1_crop_warp);
         std::cout << "feito" << std::endl;
         
-        vertically_allign(img1_crop_warp, img2_crop);
+        vertically_allign(img1_crop_warp, img2_crop, img2_vert_allig);
         
-        match_features(img1_crop_warp, img2_crop, img_matches);
+        match_features(img1_crop_warp, img2_vert_allig, img_matches);
         
         draw_grid(img_matches);
         
+        cv::Mat img_horz = horizontal_stitching(img1_crop_warp, img2_vert_allig);
+        
 		cv::imshow("Left image before rectification",img1_crop);
 		cv::imshow("Right image before rectification",img2_crop);
-//		cv::imshow("Right image after rectification",img2_crop);
+		cv::imshow("Right image after rectification", img_horz);
 		cv::imshow("Left image after rectification",img_matches);
 		cv::waitKey();
 	}
