@@ -16,7 +16,7 @@ using namespace cv;
 using namespace cv::detail;
 
 cv::Size patternSize(6,9);
-cv::Mat img1, img2, img1_crop, img2_crop, img1_crop_warp,img_matches, img2_vert_allig;
+cv::Mat imgL, imgR, imgC, imgL_crop, imgR_crop,imgC_crop,imgR_warp, imgL_warp,img_matches, imgR_vert_allig;
 
 void left2rightplane(cv::Mat &img1, cv::Mat &img2, cv::Mat &img1_warp)
 {
@@ -40,7 +40,7 @@ original_corners.push_back(cv::Point2f(0,img1.rows-1));
 
 cv::perspectiveTransform(original_corners, mask_corners, H);
 
-cv::Size size_mask_max(0,0),size_mask_min(0,0), size_mask(0,0);
+cv::Size size_mask_max(-1000,-1000),size_mask_min(1000,1000), size_mask(0,0);
 
 for(int i=0; i<mask_corners.size(); i++)
 {
@@ -67,6 +67,100 @@ cv:Mat Ht = T * H;
 //Warp image with mask size
 
 cv::warpPerspective(img1, img1_warp, Ht, size_mask);
+
+}
+
+//Function to estimate the homography matrix and return size
+cv::Size getTranform(cv::Mat &img1, cv::Mat &img2, cv::Mat &Ht)
+{
+vector<Point2f> corners1, corners2;
+
+bool found1 = cv::findChessboardCorners(img1, patternSize, corners1);
+bool found2 = cv::findChessboardCorners(img2, patternSize, corners2);
+
+//Get the homography matrix
+cv::Mat H = cv::findHomography(corners1, corners2);
+
+//Find mask size for warping
+vector<Point2f> original_corners, mask_corners;
+original_corners.push_back(cv::Point2f(0,0));
+original_corners.push_back(cv::Point2f(img1.cols-1,0));
+original_corners.push_back(cv::Point2f(img1.cols-1,img1.rows-1));
+original_corners.push_back(cv::Point2f(0,img1.rows-1));
+
+cv::perspectiveTransform(original_corners, mask_corners, H);
+
+cv::Size size_mask_max(-1000,-1000),size_mask_min(1000,1000), size_mask(0,0);
+
+for(int i=0; i<mask_corners.size(); i++)
+{
+	//std::cout << "x:" << mask_corners[i].x << "y:" << mask_corners[i].y << std::endl;
+	size_mask_min.height= min((int)mask_corners[i].y,(int)size_mask_min.height);
+	size_mask_max.height= max((int)mask_corners[i].y,(int)size_mask_max.height);
+	
+	size_mask_min.width= min((int)mask_corners[i].x,(int)size_mask_min.width);
+	size_mask_max.width= max((int)mask_corners[i].x,(int)size_mask_max.width);
+}
+
+size_mask.height = size_mask_max.height - size_mask_min.height;
+size_mask.width = size_mask_max.width - size_mask_min.width;
+
+cv::Mat T = (Mat_<double>(3,3) << 1, 0, -1*size_mask_min.width , 0, 1, -1* size_mask_min.height, 0, 0, 1);
+Ht = T * H; 
+
+return size_mask;
+}
+
+void right2leftplane(cv::Mat &img2, cv::Mat &img1, cv::Mat &img2_warp)
+{
+vector<Point2f> corners1, corners2;
+
+bool found1 = cv::findChessboardCorners(img1, patternSize, corners1);
+bool found2 = cv::findChessboardCorners(img2, patternSize, corners2);
+
+//Get the homography matrix
+cv::Mat H = cv::findHomography(corners2, corners1);
+cv::Mat H_inv = H.inv();
+
+std::cout << "H:\n" << H << std::endl;
+
+//Find mask size for warping
+vector<Point2f> original_corners, mask_corners;
+original_corners.push_back(cv::Point2f(0,0));
+original_corners.push_back(cv::Point2f(img2.cols-1,0));
+original_corners.push_back(cv::Point2f(img2.cols-1,img2.rows-1));
+original_corners.push_back(cv::Point2f(0,img2.rows-1));
+
+cv::perspectiveTransform(original_corners, mask_corners, H);
+
+cv::Size size_mask_max(-1000,-1000),size_mask_min(1000,1000), size_mask(0,0);
+
+for(int i=0; i<mask_corners.size(); i++)
+{
+	std::cout << "x:" << mask_corners[i].x << "y:" << mask_corners[i].y << std::endl;
+	size_mask_min.height= min((int)mask_corners[i].y,(int)size_mask_min.height);
+	size_mask_max.height= max((int)mask_corners[i].y,(int)size_mask_max.height);
+	
+	size_mask_min.width= min((int)mask_corners[i].x,(int)size_mask_min.width);
+	size_mask_max.width= max((int)mask_corners[i].x,(int)size_mask_max.width);
+}
+
+size_mask.height = size_mask_max.height - size_mask_min.height;
+size_mask.width = size_mask_max.width - size_mask_min.width;
+
+std::cout << size_mask_min.width << std::endl;
+
+cv::Mat T = (Mat_<double>(3,3) << 1, 0, -1*size_mask_min.width , 0, 1, -1* size_mask_min.height, 0, 0, 1);
+cv:Mat Ht = T * H; 
+
+//std::cout << "original_corners: " << original_corners << std::endl;
+//std::cout << "Altura: " << size_mask.height << " Largura: " << size_mask.width << std::endl;    
+//std::cout << "Minimo_height: " << size_mask_min.height << " Maximo_height: " << size_mask_max.height << std::endl;
+//std::cout << "Minimo_width: " << size_mask_min.width << " Maximo_width: " << size_mask_max.width << std::endl;
+
+//Warp image with mask size
+
+cv::warpPerspective(img2, img2_warp, Ht, size_mask);
 
 }
 
@@ -109,7 +203,7 @@ void match_features(cv::Mat &img1, cv::Mat &img2, cv::Mat &output)
 	cv::drawMatches(img1, keypoints1, img2, keypoints2, match1, output);
 }
 
-void vertically_allign(cv::Mat &img1, cv::Mat &img2, cv::Mat &output)
+int vertically_allign_calib(cv::Mat &img1, cv::Mat &img2)
 {
 	vector<Point2f> corners1, corners2;
 	
@@ -123,23 +217,27 @@ void vertically_allign(cv::Mat &img1, cv::Mat &img2, cv::Mat &output)
 		sum += corners1[i].y - corners2[i].y;
 	}
 	int avg = round(sum/corners1.size());
-	
-	//Create buffer
-	int bottom = avg;
+		
+	////Translation
+	//cv::Mat T = (Mat_<double>(3,3) << 1, 0, 0 , 0, 1, avg, 0, 0, 1);
+	//cv::warpPerspective(output, output, T, output.size());
+	return avg;
+}
+void vertically_allign_apply(cv::Mat &img1, cv::Mat &img2, int avg)
+{
+//Create buffer
     int borderType = cv::BORDER_CONSTANT;
     int no = 0;
     cv::Scalar value(255,255,255);
   
 	//Create Border
-	copyMakeBorder( img2, output, no, bottom, no, no, borderType, value );
-	
-	//Translation
-	cv::Mat T = (Mat_<double>(3,3) << 1, 0, 0 , 0, 1, avg, 0, 0, 1);
-	cv::warpPerspective(output, output, T, output.size());
-	  
+	if (avg > 0)
+		copyMakeBorder( img2, img2, avg, no, no, no, borderType, value );
+	else if (avg < 0)
+		copyMakeBorder( img1, img1, -avg, no, no, no, borderType, value );
 }
 
-cv::Mat horizontal_stitching(cv::Mat &img1, cv::Mat &img2)
+int horizontal_stitching_calib(cv::Mat &img1, cv::Mat &img2)
 {
 	vector<Point2f> corners1, corners2;
 	
@@ -151,14 +249,15 @@ cv::Mat horizontal_stitching(cv::Mat &img1, cv::Mat &img2)
 	for(int i=0; i<corners1.size(); i++)
 	{
 		sum += img1.cols - corners1[i].x + corners2[i].x;
-		//std::cout << "1x: " << corners1[i].x << "2x: " << corners2[i].x << std::endl;
-		//std::cout << "diffx: " << corners1[i].x - corners2[i].x << std::endl;
 	}
+	
 	int avg = round(sum/corners1.size());
-	std::cout << avg << std::endl;
-	//int output_width = img1.cols + img2.cols - avg + 100; 
-	//cv::Size output_size(img1.rows, output_width);
-	cv::Mat output = img1.clone();
+	return avg;
+}
+
+cv::Mat horizontal_stitching_apply(cv::Mat &img1, cv::Mat &img2,int avg)
+{
+cv::Mat output = img1.clone();
 	
 	//Create buffer
 	int right = img2.cols - avg;
@@ -167,14 +266,21 @@ cv::Mat horizontal_stitching(cv::Mat &img1, cv::Mat &img2)
     cv::Scalar value(255,255,255);
   
 	//Create Border
+	
 	copyMakeBorder( img1, output, no, no, no, right, borderType, value );
 	
-	img2.copyTo(output(cv::Rect(img1.cols-avg,0,img2.cols,img2.rows)));
+	//Create Mask
+	cv::Mat mask = cv::Mat::zeros(img2.size(), CV_8U);
+	cv::Mat img2_gray;
+	cv::cvtColor( img2, img2_gray, cv::COLOR_RGB2GRAY );
+	mask.setTo(255, img2_gray > 0);
+		
+	img2.copyTo(output(cv::Rect(img1.cols-avg,0,img2.cols,img2.rows)),mask);
 	
 	
 	return output;
-}
-
+}	
+	
 cv::Mat horizontal_line_stitching(cv::Mat &img1, cv::Mat &img2)
 {
 	vector<Point2f> corners1, corners2;
@@ -216,6 +322,7 @@ cv::Mat horizontal_line_stitching(cv::Mat &img1, cv::Mat &img2)
 		//}
 		avg	+= 2;
 		//avg = rand() % 50 + 150;
+		
 		img2(cv::Rect(0,i*gap,img2.cols,gap)).copyTo(output(cv::Rect(img1.cols-avg,i*gap,img2.cols,gap)));
 	}
 	
@@ -250,49 +357,78 @@ int main()
 	cv::namedWindow("Right image after rectification",cv::WINDOW_NORMAL);
 	cv::resizeWindow("Right image after rectification",960,536);
 
-	std::vector<cv::String> imagesL, imagesR;
+	std::vector<cv::String> imagesL, imagesR, imagesC;
 
 	// Path of the folder containing checkerboard images
-	std::string pathL = "/home/luis/Desktop/DIVR/Disparity_map/Depth_map/Vertical_Curve/StereoCalib_L/*.jpg"; //!!!!!!!!!!!!!!!!!!!!
-	std::string pathR = "/home/luis/Desktop/DIVR/Disparity_map/Depth_map/Vertical_Curve/StereoCalib_R/*.jpg"; //!!!!!!!!!!!!!!!!!!!!!!!
-
+	std::string pathL = "./ImagesL/*.jpg"; //!!!!!!!!!!!!!!!!!!!!
+	std::string pathR = "./ImagesR/*.jpg"; //!!!!!!!!!!!!!!!!!!!!!!!
+	std::string pathC = "./ImagesC/*.jpg";
+	
 	cv::glob(pathL, imagesL);
 	cv::glob(pathR, imagesR);
-
-	for(int i{0}; i<imagesL.size(); i++)
-	{
-		std::cout << "novo par" << std::endl;
-		std::cout << imagesL[i] << std::endl;
-		std::cout << imagesR[i] << std::endl;
-		img1 = cv::imread(imagesL[i]);
-		img2 = cv::imread(imagesR[i]);
-	   
-		//Crop images for calibration
-		int x = img1.cols/3;
-		cv::Range cols(x*2, img1.cols);
-		cv::Range rows(0, img1.rows);
-		  
-		cv::Range cols2(0, x);
-		img1_crop = img1(rows, cols);
-		img2_crop = img2(rows, cols2);
+	cv::glob(pathC, imagesC);
+	
+	
+		//std::cout << "novo par" << std::endl;
+		//std::cout << imagesL[i] << std::endl;
+		//std::cout << imagesR[i] << std::endl;
 		
-		//img1_crop = img1.clone();
-		//img2_crop = img2.clone();
-
-		left2rightplane(img1_crop,img2_crop, img1_crop_warp);
-        std::cout << "feito" << std::endl;
+		imgL = cv::imread(imagesL[0]);
+		imgR = cv::imread(imagesR[0]);
+		imgC = cv::imread(imagesC[0]);
+	   
+		////Crop images for calibration
+		//int x = imgL.cols/3;
+		//cv::Range cols(x*2, imgL.cols);
+		//cv::Range rows(0, imgL.rows);
+		  
+		//cv::Range cols2(0, x);
+		//imgL_crop = imgL(rows, cols);
+		//imgR_crop = imgR(rows, cols2);
+		
+		//imgL_crop = imgL.clone();
+		//imgR_crop = imgR.clone();
+		//imgC_crop = imgC.clone();
+		
+		//left2rightplane(imgL_crop,imgC_crop, imgL_crop_warp);
+		//right2leftplane(imgR_crop, imgC_crop, imgR_crop_warp);
+		
+		//Get homography matrix and mask size
+		cv::Mat Ht_L, Ht_R;
+		
+		cv::Size mask_L = getTranform(imgL,imgC,Ht_L);
+		cv::Size mask_R = getTranform(imgR,imgC,Ht_R);
         
-        vertically_allign(img1_crop_warp, img2_crop, img2_vert_allig);
+        cv::warpPerspective(imgL, imgL_warp, Ht_L, mask_L);
+        cv::warpPerspective(imgR, imgR_warp, Ht_R, mask_R);
         
-        match_features(img1_crop_warp, img2_vert_allig, img_matches);
+        int avg_v = vertically_allign_calib(imgL_warp, imgR_warp);
+        int avg_h = horizontal_stitching_calib(imgL_warp, imgR_warp);
         
+    for(int i{1}; i<imagesL.size(); i++)
+	{
+		imgL = cv::imread(imagesL[i]);
+		imgR = cv::imread(imagesR[i]);
+		
+        //warp images to the same plane
+        cv::warpPerspective(imgL, imgL_warp, Ht_L, mask_L);
+        cv::warpPerspective(imgR, imgR_warp, Ht_R, mask_R);
+        
+        //Allign features vertically
+        vertically_allign_apply(imgL_warp, imgR_warp, avg_v);
+        
+        //Match features for analyses 
+        match_features(imgL_warp, imgR_warp, img_matches);
+        
+        //Draw horizontal evaluation grid
         draw_grid(img_matches);
         
-        //cv::Mat img_horz = horizontal_stitching(img1_crop_warp, img2_vert_allig);
-        cv::Mat img_horz = horizontal_line_stitching(img1_crop_warp, img2_vert_allig);
+        //Stich images
+        cv::Mat img_horz = horizontal_stitching_apply(imgL_warp, imgR_warp, avg_h);
+        //cv::Mat img_horz = horizontal_line_stitching(imgL_crop_warp, imgR_crop_warp);
         
-		cv::imshow("Left image before rectification",img1_crop);
-		cv::imshow("Right image before rectification",img2_crop);
+		cv::imshow("Left image before rectification",imgL_warp);
+		cv::imshow("Right image before rectification",imgR_warp);
 		cv::imshow("Right image after rectification", img_horz);
 		cv::imshow("Left image after rectification",img_matches);
 		cv::waitKey();
