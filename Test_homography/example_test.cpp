@@ -281,6 +281,40 @@ cv::Mat output = img1.clone();
 	return output;
 }	
 	
+cv::Mat horizontal_line_stitching_apply(cv::Mat &img1, cv::Mat &img2,int avg)
+{
+cv::Mat output = img1.clone();
+	
+	//Create buffer
+	int right = img2.cols - avg;
+    int borderType = cv::BORDER_CONSTANT;
+    int no = 0;
+    cv::Scalar value(255,255,255);
+  
+	//Create Border
+	
+	copyMakeBorder( img1, output, no, no, no, right, borderType, value );
+	
+	//Create Mask
+	cv::Mat mask = cv::Mat::zeros(img2.size(), CV_8U);
+	cv::Mat img2_gray;
+	cv::cvtColor( img2, img2_gray, cv::COLOR_RGB2GRAY );
+	mask.setTo(255, img2_gray > 0);
+	
+	int gap = 30;
+	int line = round((img2.rows/gap));
+	int remainder = round((img2.rows % gap)); 	
+	
+	for(int i=0; i<line-1; i++)
+	{
+		
+		avg	+= 10;
+		img2(cv::Rect(0,i*gap,img2.cols,gap)).copyTo(output(cv::Rect(img1.cols-avg,i*gap,img2.cols,gap)),mask(cv::Rect(0,i*gap,img2.cols,gap)));
+	}	
+	
+	return output;
+}	
+	
 cv::Mat horizontal_line_stitching(cv::Mat &img1, cv::Mat &img2)
 {
 	vector<Point2f> corners1, corners2;
@@ -369,42 +403,84 @@ int main()
 	cv::glob(pathC, imagesC);
 	
 	
-		//std::cout << "novo par" << std::endl;
-		//std::cout << imagesL[i] << std::endl;
-		//std::cout << imagesR[i] << std::endl;
+	//std::cout << "novo par" << std::endl;
+	std::cout << imagesL[0] << std::endl;
+	std::cout << imagesR[0] << std::endl;
+	std::cout << imagesC[0] << std::endl;
 		
-		imgL = cv::imread(imagesL[0]);
-		imgR = cv::imread(imagesR[0]);
-		imgC = cv::imread(imagesC[0]);
+	imgL = cv::imread(imagesL[0]);
+	imgR = cv::imread(imagesR[0]);
+	imgC = cv::imread(imagesC[0]);
 	   
-		////Crop images for calibration
-		//int x = imgL.cols/3;
-		//cv::Range cols(x*2, imgL.cols);
-		//cv::Range rows(0, imgL.rows);
+	////Crop images for calibration
+	//int x = imgL.cols/3;
+	//cv::Range cols(x*2, imgL.cols);
+	//cv::Range rows(0, imgL.rows);
 		  
-		//cv::Range cols2(0, x);
-		//imgL_crop = imgL(rows, cols);
-		//imgR_crop = imgR(rows, cols2);
+	//cv::Range cols2(0, x);
+	//imgL_crop = imgL(rows, cols);
+	//imgR_crop = imgR(rows, cols2);
 		
-		//imgL_crop = imgL.clone();
-		//imgR_crop = imgR.clone();
-		//imgC_crop = imgC.clone();
+	//imgL_crop = imgL.clone();
+	//imgR_crop = imgR.clone();
+	//imgC_crop = imgC.clone();
 		
-		//left2rightplane(imgL_crop,imgC_crop, imgL_crop_warp);
-		//right2leftplane(imgR_crop, imgC_crop, imgR_crop_warp);
+	//left2rightplane(imgL_crop,imgC_crop, imgL_crop_warp);
+	//right2leftplane(imgR_crop, imgC_crop, imgR_crop_warp);
 		
-		//Get homography matrix and mask size
-		cv::Mat Ht_L, Ht_R;
-		
-		cv::Size mask_L = getTranform(imgL,imgC,Ht_L);
-		cv::Size mask_R = getTranform(imgR,imgC,Ht_R);
+	//Get homography matrix and mask size
+	cv::Mat Ht_L, Ht_R;
+	int x, avg_v, avg_h;
+	cv::Size mask_L, mask_R;	
+	int mask_L_height, mask_L_width , mask_R_height, mask_R_width;
+	
+	std::cout << "New calib? 1-yes 0-no " << std::endl; // Type a number and press enter
+	cin >> x;
+	
+	if(x)
+	{
+		mask_L = getTranform(imgL,imgC,Ht_L);
+		mask_R = getTranform(imgR,imgC,Ht_R);
         
         cv::warpPerspective(imgL, imgL_warp, Ht_L, mask_L);
         cv::warpPerspective(imgR, imgR_warp, Ht_R, mask_R);
         
-        int avg_v = vertically_allign_calib(imgL_warp, imgR_warp);
-        int avg_h = horizontal_stitching_calib(imgL_warp, imgR_warp);
+        avg_v = vertically_allign_calib(imgL_warp, imgR_warp);
+        avg_h = horizontal_stitching_calib(imgL_warp, imgR_warp);
         
+        mask_L_height = mask_L.height;
+        mask_L_width = mask_L.width;
+        mask_R_height = mask_R.height;
+        mask_R_width = mask_R.width;
+        
+        cv::FileStorage cv_file = cv::FileStorage("./Homography_params_01.xml", cv::FileStorage::WRITE);
+		cv_file.write("Ht_L",Ht_L);
+		cv_file.write("Ht_R",Ht_R);
+		cv_file.write("mask_L_height",mask_L_height);
+		cv_file.write("mask_L_width",mask_L_width);
+		cv_file.write("mask_R_height",mask_R_height);
+		cv_file.write("mask_R_width",mask_R_width);
+		cv_file.write("avg_v",avg_v);
+		cv_file.write("avg_h",avg_h); 
+	} else
+	{
+		cv::FileStorage fs("./Homography_params_01.xml", cv::FileStorage::READ);
+
+		fs["Ht_L"] >> Ht_L;
+		fs["Ht_R"] >> Ht_R;
+		fs["mask_L_height"] >> mask_L_height;
+		fs["mask_L_width"] >> mask_L_width; 
+		fs["mask_R_height"] >> mask_R_height;
+		fs["mask_R_width"] >> mask_R_width; 
+		fs["avg_v"] >> avg_v;
+		fs["avg_h"] >> avg_h; 
+		
+		mask_L.height = mask_L_height;
+        mask_L.width  = mask_L_width ;
+        mask_R.height = mask_R_height;
+        mask_R.width  = mask_R_width ;
+	}
+		
     for(int i{1}; i<imagesL.size(); i++)
 	{
 		imgL = cv::imread(imagesL[i]);
@@ -424,8 +500,8 @@ int main()
         draw_grid(img_matches);
         
         //Stich images
-        cv::Mat img_horz = horizontal_stitching_apply(imgL_warp, imgR_warp, avg_h);
-        //cv::Mat img_horz = horizontal_line_stitching(imgL_crop_warp, imgR_crop_warp);
+        //cv::Mat img_horz = horizontal_stitching_apply(imgL_warp, imgR_warp, avg_h);
+        cv::Mat img_horz = horizontal_line_stitching_apply(imgL_warp, imgR_warp, avg_h);
         
 		cv::imshow("Left image before rectification",imgL_warp);
 		cv::imshow("Right image before rectification",imgR_warp);
