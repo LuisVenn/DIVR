@@ -70,16 +70,36 @@ cv::warpPerspective(img1, img1_warp, Ht, size_mask);
 
 }
 
+void DivideVector(vector<Point2f> &v, float k){
+     for(int i=0; i<v.size(); i++)
+     {
+		v[i].x = v[i].x*k ;
+		v[i].y = v[i].y*k ;
+	 }
+  }
+  
+ void diffVectors(vector<Point2f> &a, vector<Point2f> &b){
+	 
+     for(int i=0; i<a.size(); i++)
+     {
+		a[i].y = a[i].y - b[i].y;
+		a[i].x = a[i].x - b[i].x;
+	 }
+ }
+ 
+ void sumVectors(vector<Point2f> &a, vector<Point2f> &b){
+	 
+     for(int i=0; i<a.size(); i++)
+     {
+		a[i].y = a[i].y + b[i].y;
+		a[i].x = a[i].x + b[i].x;
+	 }
+ }
+ 
 //Function to estimate the homography matrix and return size
-cv::Size getTransform(cv::Mat &img1, cv::Mat &img2, cv::Mat &Ht)
+cv::Size getTransform(cv::Mat &img1, vector<Point2f> &corners1, vector<Point2f> &corners2, cv::Mat &Ht)
 {
-vector<Point2f> corners1, corners2;
 
-bool found1 = cv::findChessboardCorners(img1, patternSize, corners1);
-bool found2 = cv::findChessboardCorners(img2, patternSize, corners2);
-
-if (!found1) std::cout << "nao encontrei 1" << std::endl;
-if (!found2) std::cout << "nao encontrei 2 " << std::endl;
 //Get the homography matrix
 cv::Mat H = cv::findHomography(corners1, corners2);
 
@@ -111,6 +131,22 @@ cv::Mat T = (Mat_<double>(3,3) << 1, 0, -1*size_mask_min.width , 0, 1, -1* size_
 Ht = T * H; 
 
 return size_mask;
+}
+
+void estimateTransform(cv::Mat imgL,cv::Mat imgR, vector<Point2f> &cornersL, vector<Point2f> &cornersR, cv::Mat &Ht_L, cv::Mat &Ht_R, cv::Size &mask_L, cv::Size &mask_R, float k)
+{
+	
+	vector<Point2f> cornersC_estimated = cornersL;
+
+	//Estimate by assuming linear the corners of C
+	
+	diffVectors(cornersC_estimated, cornersR);
+	DivideVector(cornersC_estimated,k);
+	sumVectors(cornersC_estimated,cornersR);
+	std::cout << cornersC_estimated << std::endl;
+	mask_L = getTransform(imgL, cornersL, cornersC_estimated, Ht_L);
+	mask_R = getTransform(imgR, cornersR, cornersC_estimated, Ht_R);
+
 }
 
 void right2leftplane(cv::Mat &img2, cv::Mat &img1, cv::Mat &img2_warp)
@@ -265,20 +301,26 @@ cv::Mat output = img1.clone();
 	int right = img2.cols - avg;
     int borderType = cv::BORDER_CONSTANT;
     int no = 0;
+    int buff = 0;
     cv::Scalar value(255,255,255);
-  
+	if(img2.rows >img1.rows) buff = img2.rows-img1.rows;
+	
 	//Create Border
 	std::cout << right << std::endl;
-	copyMakeBorder( img1, output, no, no, no, right, borderType, value );
+	copyMakeBorder( img1, output, no, buff, no, right, borderType, value );
 	
 	//Create Mask
 	cv::Mat mask = cv::Mat::zeros(img2.size(), CV_8U);
 	cv::Mat img2_gray;
 	cv::cvtColor( img2, img2_gray, cv::COLOR_RGB2GRAY );
 	mask.setTo(255, img2_gray > 0);
-		
+	std::cout << "img1.cols-avg: " << img1.cols-avg << std::endl;
+	std::cout << "img2.cols: " << img2.cols << std::endl;	
+	std::cout << "img2.rows: " << img2.rows << std::endl;
+	std::cout << "output.cols: " << output.cols << std::endl;
+	std::cout << "output.rows: " << output.rows << std::endl;
 	img2.copyTo(output(cv::Rect(img1.cols-avg,0,img2.cols,img2.rows)),mask);
-	
+	std::cout << "foi aqui" << std::endl;
 	
 	return output;
 }	
@@ -417,6 +459,12 @@ int main()
 	imgL = cv::imread(imagesL[0]);
 	imgR = cv::imread(imagesR[0]);
 	imgC = cv::imread(imagesC[0]);
+	
+	vector<Point2f> cornersL, cornersC, cornersR;
+	bool found1 = cv::findChessboardCorners(imgL, patternSize, cornersL);
+	bool found2 = cv::findChessboardCorners(imgC, patternSize, cornersC);
+	bool found3 = cv::findChessboardCorners(imgR, patternSize, cornersR);
+
 	   
 	////Crop images for calibration
 	//int x = imgL.cols/3;
@@ -445,8 +493,14 @@ int main()
 	
 	if(x)
 	{
-		mask_L = getTransform(imgL,imgC,Ht_L);
-		mask_R = getTransform(imgR,imgC,Ht_R);
+		/////////////GET DIRECT TRANSFORM////////////
+		//mask_L = getTransform(imgL,cornersL,cornersC,Ht_L); //returns mask and the matrix H
+		//mask_R = getTransform(imgR,cornersR,cornersC,Ht_R);
+        
+        ////////////ESTIMATE TRANSFORM//////////
+        
+        estimateTransform(imgL, imgR, cornersL, cornersR, Ht_L, Ht_R, mask_L, mask_R, 0.75);
+        std::cout << Ht_L << std::endl;
         
         cv::warpPerspective(imgL, imgL_warp, Ht_L, mask_L);
         cv::warpPerspective(imgR, imgR_warp, Ht_R, mask_R);
@@ -510,9 +564,11 @@ int main()
         //Draw horizontal evaluation grid
         draw_grid(img_matches);
         std::cout << "deu grid" << std::endl;
+        
         //Stich images
         cv::Mat img_horz = horizontal_stitching_apply(imgL_warp, imgR_warp, avg_h);
         //cv::Mat img_horz = horizontal_line_stitching_apply(imgL_warp, imgR_warp, avg_h);
+        
         std::cout << "deu imghorz" << std::endl;
         
 		cv::imshow("Left image before rectification",imgL_warp);
