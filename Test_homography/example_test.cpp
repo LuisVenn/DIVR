@@ -70,7 +70,7 @@ cv::warpPerspective(img1, img1_warp, Ht, size_mask);
 
 }
 
-void DivideVector(vector<Point2f> &v, float k){
+void multVector(vector<Point2f> &v, float k){
      for(int i=0; i<v.size(); i++)
      {
 		v[i].x = v[i].x*k ;
@@ -141,7 +141,7 @@ void estimateTransform(cv::Mat imgL,cv::Mat imgR, vector<Point2f> &cornersL, vec
 	//Estimate by assuming linear the corners of C
 	
 	diffVectors(cornersC_estimated, cornersR);
-	DivideVector(cornersC_estimated,k);
+	multVector(cornersC_estimated,k);
 	sumVectors(cornersC_estimated,cornersR);
 	std::cout << cornersC_estimated << std::endl;
 	mask_L = getTransform(imgL, cornersL, cornersC_estimated, Ht_L);
@@ -295,7 +295,7 @@ int horizontal_stitching_calib(cv::Mat &img1, cv::Mat &img2)
 
 cv::Mat horizontal_stitching_apply(cv::Mat &img1, cv::Mat &img2,int avg)
 {
-cv::Mat output = img1.clone();
+	cv::Mat output = img1.clone();
 	
 	//Create buffer
 	int right = img2.cols - avg;
@@ -306,23 +306,32 @@ cv::Mat output = img1.clone();
 	if(img2.rows >img1.rows) buff = img2.rows-img1.rows;
 	
 	//Create Border
-	std::cout << right << std::endl;
+
 	copyMakeBorder( img1, output, no, buff, no, right, borderType, value );
 	
 	//Create Mask
 	cv::Mat mask = cv::Mat::zeros(img2.size(), CV_8U);
-	cv::Mat img2_gray;
+	cv::Mat mask_output = cv::Mat::zeros(output.size(), CV_8U);
+	cv::Mat img2_gray, output_gray;
 	cv::cvtColor( img2, img2_gray, cv::COLOR_RGB2GRAY );
-	mask.setTo(255, img2_gray > 0);
-	std::cout << "img1.cols-avg: " << img1.cols-avg << std::endl;
-	std::cout << "img2.cols: " << img2.cols << std::endl;	
-	std::cout << "img2.rows: " << img2.rows << std::endl;
-	std::cout << "output.cols: " << output.cols << std::endl;
-	std::cout << "output.rows: " << output.rows << std::endl;
-	img2.copyTo(output(cv::Rect(img1.cols-avg,0,img2.cols,img2.rows)),mask);
-	std::cout << "foi aqui" << std::endl;
+	cv::cvtColor( output, output_gray, cv::COLOR_RGB2GRAY);
 	
-	return output;
+	mask.setTo(255, img2_gray > 0);
+    mask_output.setTo(255, output_gray > 0);
+    
+    cv::Mat outputBuff = output.clone();
+    
+    outputBuff.setTo(cv::Scalar(255,255,255));
+    output.copyTo(outputBuff,mask_output);
+
+
+    // color all masked pixel red:
+	
+	img2.copyTo(outputBuff(cv::Rect(img1.cols-avg,0,img2.cols,img2.rows)),mask);
+	//output.copyTo(outputBuff,mask_output);
+	
+	
+	return outputBuff;
 }	
 	
 cv::Mat horizontal_line_stitching_apply(cv::Mat &img1, cv::Mat &img2,int avg)
@@ -425,26 +434,44 @@ for(int i=0;i<height;i+=dist)
 int main()
 {
     //Image sizes
-	cv::namedWindow("Left image before rectification",cv::WINDOW_NORMAL);
-	cv::resizeWindow("Left image before rectification",960,536);
-	cv::namedWindow("Right image before rectification",cv::WINDOW_NORMAL);
-	cv::resizeWindow("Right image before rectification",960,536);
-
-	cv::namedWindow("Left image after rectification",cv::WINDOW_NORMAL);
-	cv::resizeWindow("Left image after rectification",960,536);
-	cv::namedWindow("Right image after rectification",cv::WINDOW_NORMAL);
-	cv::resizeWindow("Right image after rectification",960,536);
-
+	cv::namedWindow("Left image warped",cv::WINDOW_NORMAL);
+	cv::resizeWindow("Left image warped",960,536);
+	cv::namedWindow("Right image warped",cv::WINDOW_NORMAL);
+	cv::resizeWindow("Right image warped",960,536);
+	cv::namedWindow("Features matching",cv::WINDOW_NORMAL);
+	cv::resizeWindow("Features matching",960,536);
+	cv::namedWindow("Stitching result",cv::WINDOW_NORMAL);
+	cv::resizeWindow("Stitching result",960,536);
+	cv::namedWindow("Right image",cv::WINDOW_NORMAL);
+	cv::resizeWindow("Right image",960,536);
+	cv::namedWindow("Left image",cv::WINDOW_NORMAL);
+	cv::resizeWindow("Left image",960,536);
+	cv::namedWindow("Center image",cv::WINDOW_NORMAL);
+	cv::resizeWindow("Center image",960,536);
+	
 	std::vector<cv::String> imagesL, imagesR, imagesC;
-
+	
 	// Path of the folder containing checkerboard images
 	//std::string pathL = "./ImagesL/*.jpg"; //!!!!!!!!!!!!!!!!!!!!
 	//std::string pathR = "./ImagesR/*.jpg"; //!!!!!!!!!!!!!!!!!!!!!!!
 	//std::string pathC = "./ImagesC/*.jpg";
+	bool calibrationImg;
+	std::cout << "Images to use? 1-chess 0-sample " << std::endl; // Type a number and press enter
+	cin >> calibrationImg;
 	
-	std::string pathL = "../L1.jpg"; //!!!!!!!!!!!!!!!!!!!!
-	std::string pathR = "../R1.jpg"; //!!!!!!!!!!!!!!!!!!!!!!!
-	std::string pathC = "../C1.jpg";
+	std::string pathL, pathR, pathC;
+	
+	if(calibrationImg)
+	{
+		pathL = "../Images/L1_squarefloor.jpg"; //!!!!!!!!!!!!!!!!!!!!
+		pathR = "../Images/R1_squarefloor.jpg"; //!!!!!!!!!!!!!!!!!!!!!!!
+		pathC = "../Images/C1_squarefloor.jpg";
+	}else
+	{
+		pathL = "../Images/L4_squarefloor.jpg"; //!!!!!!!!!!!!!!!!!!!!
+		pathR = "../Images/R4_squarefloor.jpg"; //!!!!!!!!!!!!!!!!!!!!!!!
+		pathC = "../Images/C4_squarefloor.jpg";
+	}
 	
 	cv::glob(pathL, imagesL);
 	cv::glob(pathR, imagesR);
@@ -460,11 +487,9 @@ int main()
 	imgR = cv::imread(imagesR[0]);
 	imgC = cv::imread(imagesC[0]);
 	
-	vector<Point2f> cornersL, cornersC, cornersR;
-	bool found1 = cv::findChessboardCorners(imgL, patternSize, cornersL);
-	bool found2 = cv::findChessboardCorners(imgC, patternSize, cornersC);
-	bool found3 = cv::findChessboardCorners(imgR, patternSize, cornersR);
-
+	cv::imshow("Left image",imgL);
+	cv::imshow("Right image",imgR);
+	cv::imshow("Center image", imgC);
 	   
 	////Crop images for calibration
 	//int x = imgL.cols/3;
@@ -484,31 +509,49 @@ int main()
 		
 	//Get homography matrix and mask size
 	cv::Mat Ht_L, Ht_R;
-	int x,save, avg_v, avg_h;
 	cv::Size mask_L, mask_R;	
-	int mask_L_height, mask_L_width , mask_R_height, mask_R_width;
+	int mask_L_height, mask_L_width , mask_R_height, mask_R_width, avg_v, avg_h;;
+	bool newCalib = 0;
+	bool estimate, save;
 	
-	std::cout << "New calib? 1-yes 0-no " << std::endl; // Type a number and press enter
-	cin >> x;
-	
-	if(x)
+	if(calibrationImg)
 	{
-		/////////////GET DIRECT TRANSFORM////////////
-		//mask_L = getTransform(imgL,cornersL,cornersC,Ht_L); //returns mask and the matrix H
-		//mask_R = getTransform(imgR,cornersR,cornersC,Ht_R);
-        
-        ////////////ESTIMATE TRANSFORM//////////
-        
-        estimateTransform(imgL, imgR, cornersL, cornersR, Ht_L, Ht_R, mask_L, mask_R, 0.75);
-        std::cout << Ht_L << std::endl;
-        
-        cv::warpPerspective(imgL, imgL_warp, Ht_L, mask_L);
-        cv::warpPerspective(imgR, imgR_warp, Ht_R, mask_R);
-        
-        avg_v = vertically_allign_calib(imgL_warp, imgR_warp);
-        avg_h = horizontal_stitching_calib(imgL_warp, imgR_warp);
-        
-        std::cout << "Save transformation? 1-yes 0-no " << std::endl; // Type a number and press enter
+		std::cout << "New calib? 1-yes 0-no " << std::endl; // Type a number and press enter
+		cin >> newCalib;
+	}
+	
+	if(newCalib)
+	{
+		vector<Point2f> cornersL, cornersC, cornersR;
+		bool found1 = cv::findChessboardCorners(imgL, patternSize, cornersL);
+		bool found2 = cv::findChessboardCorners(imgC, patternSize, cornersC);
+		bool found3 = cv::findChessboardCorners(imgR, patternSize, cornersR);
+		
+		std::cout << "Type of calibration? 1-estimated 0-to center image " << std::endl; // Type a number and press enter
+		cin >> estimate;
+		if(!estimate)
+		{
+			/////////////GET DIRECT TRANSFORM////////////
+			mask_L = getTransform(imgL,cornersL,cornersC,Ht_L); //returns mask and the matrix H
+			mask_R = getTransform(imgR,cornersR,cornersC,Ht_R);
+		}else
+		{
+			////////////ESTIMATE TRANSFORM//////////
+			float k;
+			std::cout << "Position? (0-1)" << std::endl; // Type a number and press enter
+			cin >> k;
+			
+			estimateTransform(imgL, imgR, cornersL, cornersR, Ht_L, Ht_R, mask_L, mask_R, k);
+			std::cout << Ht_L << std::endl;
+		}
+		//Warp
+		cv::warpPerspective(imgL, imgL_warp, Ht_L, mask_L);
+		cv::warpPerspective(imgR, imgR_warp, Ht_R, mask_R);
+			
+		avg_v = vertically_allign_calib(imgL_warp, imgR_warp);
+		avg_h = horizontal_stitching_calib(imgL_warp, imgR_warp);
+		
+		std::cout << "Save transformation? 1-yes 0-no " << std::endl; // Type a number and press enter
 		cin >> save;
 		if(save)
 		{
@@ -516,8 +559,8 @@ int main()
 			mask_L_width = mask_L.width;
 			mask_R_height = mask_R.height;
 			mask_R_width = mask_R.width;
-			
-			cv::FileStorage cv_file = cv::FileStorage("./Homography_params_test.xml", cv::FileStorage::WRITE);
+				
+			cv::FileStorage cv_file = cv::FileStorage("./Homography_params_squarefloor.xml", cv::FileStorage::WRITE);
 			cv_file.write("Ht_L",Ht_L);
 			cv_file.write("Ht_R",Ht_R);
 			cv_file.write("mask_L_height",mask_L_height);
@@ -527,9 +570,9 @@ int main()
 			cv_file.write("avg_v",avg_v);
 			cv_file.write("avg_h",avg_h); 
 		}
-	} else
+	}else
 	{
-		cv::FileStorage fs("./Homography_params_test.xml", cv::FileStorage::READ);
+		cv::FileStorage fs("./Homography_params_squarefloor.xml", cv::FileStorage::READ);
 
 		fs["Ht_L"] >> Ht_L;
 		fs["Ht_R"] >> Ht_R;
@@ -557,25 +600,24 @@ int main()
         
         //Allign features vertically
         vertically_allign_apply(imgL_warp, imgR_warp, avg_v);
-        std::cout << "deu va" << std::endl;
+        
         //Match features for analyses 
         match_features(imgL_warp, imgR_warp, img_matches);
-        std::cout << "deu matchf" << std::endl;
+        
         //Draw horizontal evaluation grid
         draw_grid(img_matches);
-        std::cout << "deu grid" << std::endl;
         
         //Stich images
         cv::Mat img_horz = horizontal_stitching_apply(imgL_warp, imgR_warp, avg_h);
         //cv::Mat img_horz = horizontal_line_stitching_apply(imgL_warp, imgR_warp, avg_h);
         
-        std::cout << "deu imghorz" << std::endl;
         
-		cv::imshow("Left image before rectification",imgL_warp);
-		cv::imshow("Right image before rectification",imgR_warp);
-		cv::imshow("Right image after rectification", img_horz);
-		cv::imshow("Left image after rectification",img_matches);
+		cv::imshow("Left image warped",imgL_warp);
+		cv::imshow("Right image warped",imgR_warp);
+		cv::imshow("Stitching result", img_horz);
+		cv::imshow("Features matching",img_matches);
 		cv::waitKey();
+		
 	}
 
 
