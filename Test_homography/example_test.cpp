@@ -10,6 +10,8 @@
 #include <opencv2/core/utility.hpp>
 #include "opencv2/imgcodecs.hpp"
 
+#include <string>
+
 #include <fstream>
 using namespace std;
 using namespace cv;
@@ -202,14 +204,17 @@ cv::warpPerspective(img2, img2_warp, Ht, size_mask);
 
 }
 
-void saveimage(cv::Mat &img1_crop_warp)
+void saveimage(cv::Mat &img1)
 {
 	std::ostringstream name;
-    int val;
-    std::cout << "Val?" << std::endl;
+    string val;
+    cv::namedWindow("Save image",cv::WINDOW_NORMAL);
+	cv::resizeWindow("Save image",960,536);
+    cv::imshow("Save image",img1);
+    std::cout << "Image name?" << std::endl;
     std::cin >> val;
-    name << "/home/luis/Desktop/DIVR/Disparity_map/Depth_map/Vertical_Curve/StereoCalib_L_warp/" << val << ".jpg";
-    cv::imwrite(name.str(), img1_crop_warp);
+    name << "/home/luis/Desktop/DIVR/Images/" << val << ".jpg";
+    cv::imwrite(name.str(), img1);
 }
 
 void match_features(cv::Mat &img1, cv::Mat &img2, cv::Mat &output)
@@ -231,13 +236,19 @@ void match_features(cv::Mat &img1, cv::Mat &img2, cv::Mat &output)
 
 	std::vector<DMatch> match1;
 	std::vector<DMatch> match2;
-
-	for(int i=0; i<matches.size(); i++)
+	int i2 = 0;
+	
+	match1.push_back(matches[0][0]);
+	for(int i=1; i<matches.size(); i++)
 	{
-		match1.push_back(matches[i][0]);
-		match2.push_back(matches[i][1]);
+		if( matches[i][0].distance < match1[0].distance ){
+			match1[0]=matches[i][0];
+			
+			
+		}
+		
 	}
-
+	
 	cv::drawMatches(img1, keypoints1, img2, keypoints2, match1, output);
 }
 
@@ -318,7 +329,7 @@ cv::Mat horizontal_stitching_apply(cv::Mat &img1, cv::Mat &img2,int avg)
 	
 	mask.setTo(255, img2_gray > 0);
     mask_output.setTo(255, output_gray > 0);
-    
+    mask_output.setTo(0,output_gray == 255);
     cv::Mat outputBuff = output.clone();
     
     outputBuff.setTo(cv::Scalar(255,255,255));
@@ -328,9 +339,17 @@ cv::Mat horizontal_stitching_apply(cv::Mat &img1, cv::Mat &img2,int avg)
     // color all masked pixel red:
 	
 	img2.copyTo(outputBuff(cv::Rect(img1.cols-avg,0,img2.cols,img2.rows)),mask);
-	//output.copyTo(outputBuff,mask_output);
+	
+	//Get ghost image
+	
+	cv::Mat outputBuff2 = outputBuff.clone();
+	output.copyTo(outputBuff,mask_output);
+	
+	cv::Mat outputGhost = outputBuff2*0.5 + outputBuff*0.5;
 	
 	
+	
+	//If want to show ghost change to outputGhost
 	return outputBuff;
 }	
 	
@@ -342,17 +361,28 @@ cv::Mat output = img1.clone();
 	int right = img2.cols - avg;
     int borderType = cv::BORDER_CONSTANT;
     int no = 0;
+    int buff = 0;
     cv::Scalar value(255,255,255);
-  
-	//Create Border
+	if(img2.rows >img1.rows) buff = img2.rows-img1.rows;
 	
-	copyMakeBorder( img1, output, no, no, no, right, borderType, value );
+	//Create Border
+
+	copyMakeBorder( img1, output, no, buff, no, right, borderType, value );
 	
 	//Create Mask
 	cv::Mat mask = cv::Mat::zeros(img2.size(), CV_8U);
-	cv::Mat img2_gray;
+	cv::Mat mask_output = cv::Mat::zeros(output.size(), CV_8U);
+	cv::Mat img2_gray, output_gray;
 	cv::cvtColor( img2, img2_gray, cv::COLOR_RGB2GRAY );
+	cv::cvtColor( output, output_gray, cv::COLOR_RGB2GRAY);
+	
 	mask.setTo(255, img2_gray > 0);
+    mask_output.setTo(255, output_gray > 0);
+    
+    cv::Mat outputBuff = output.clone();
+    
+    outputBuff.setTo(cv::Scalar(255,255,255));
+    output.copyTo(outputBuff,mask_output);
 	
 	int gap = 30;
 	int line = round((img2.rows/gap));
@@ -362,7 +392,7 @@ cv::Mat output = img1.clone();
 	{
 		
 		avg	+= 10;
-		img2(cv::Rect(0,i*gap,img2.cols,gap)).copyTo(output(cv::Rect(img1.cols-avg,i*gap,img2.cols,gap)),mask(cv::Rect(0,i*gap,img2.cols,gap)));
+		img2(cv::Rect(0,i*gap,img2.cols,gap)).copyTo(outputBuff(cv::Rect(img1.cols-avg,i*gap,img2.cols,gap)),mask(cv::Rect(0,i*gap,img2.cols,gap)));
 	}	
 	
 	return output;
@@ -429,6 +459,7 @@ for(int i=0;i<height;i+=dist)
   cv::line(mat,Point(0,i),Point(width,i),cv::Scalar(255,255,255));
 
 }
+
 ///////////////////////////////////////////////////////////////////////////////////////
 
 int main()
@@ -610,7 +641,8 @@ int main()
         //Stich images
         cv::Mat img_horz = horizontal_stitching_apply(imgL_warp, imgR_warp, avg_h);
         //cv::Mat img_horz = horizontal_line_stitching_apply(imgL_warp, imgR_warp, avg_h);
-        
+        saveimage(img_horz);
+		//saveimage(imgR_warp);
         
 		cv::imshow("Left image warped",imgL_warp);
 		cv::imshow("Right image warped",imgR_warp);
