@@ -217,7 +217,7 @@ void saveimage(cv::Mat &img1)
     cv::imwrite(name.str(), img1);
 }
 
-void match_features(cv::Mat &img1, cv::Mat &img2, cv::Mat &output)
+void match_features2(cv::Mat &img1, cv::Mat &img2, cv::Mat &output)
 {
 	//Features dectection and matching
 	Ptr<ORB> detector = ORB::create(200);
@@ -250,6 +250,80 @@ void match_features(cv::Mat &img1, cv::Mat &img2, cv::Mat &output)
 	}
 	
 	cv::drawMatches(img1, keypoints1, img2, keypoints2, match1, output);
+}
+
+void getLines(cv::Mat img1, cv::Mat img2, cv::Mat mask1, cv::Mat mask2, int &top, int &bot, int &d)
+{
+	//Features dectection and matching
+	Ptr<ORB> detector = cv::ORB::create();
+	std::vector<KeyPoint> keypoints1,keypoints2;
+	Mat descriptors1,descriptors2;
+
+	detector->detectAndCompute( img1, mask1, keypoints1, descriptors1 );
+	detector->detectAndCompute( img2, mask2, keypoints2, descriptors2 );
+
+	//Matching FEatures
+	BFMatcher matcher(NORM_HAMMING);
+	//matcher = cv::BFMatcher::create(cv::NORM_HAMMING);
+	std::vector<vector<DMatch> > matches;
+
+	matcher.knnMatch(descriptors1, descriptors2, matches,2);
+
+	std::vector<DMatch> match1;
+	std::vector<DMatch> match2;
+	int i2 = 0;
+	
+	//-- Filter matches using the Lowe's ratio test
+    const float ratio_thresh = 0.7f;
+    std::vector<DMatch> good_matches;
+    std::vector<DMatch> query;
+    std::vector<DMatch> train;
+    
+    good_matches.push_back(matches[0][0]);
+    //get the best match
+    for (size_t i = 0; i < matches.size(); i++)
+    {
+        if (matches[i][0].distance < good_matches[0].distance)
+        {
+            good_matches[0] = matches[i][0];
+        }
+    }
+  
+   	std::cout << "Keypoint 1: " << keypoints1[good_matches[0].queryIdx].pt << std::endl;
+	std::cout << "Keypoint 2: " << keypoints2[good_matches[0].trainIdx].pt << std::endl;
+   
+   //In wich blobs are this features
+   
+	cv::Mat stat,centroid,mask3; //para que preciso da mask3??
+	int nLabels = connectedComponentsWithStats(mask1, mask3, stat,centroid,8, CV_16U);
+	vector<Rect> rComp;
+	std::cout << nLabels <<std::endl;
+	int w = img1.cols;
+	for (int i=1;i<nLabels;i++)
+	{
+		cv::Point pt1 = keypoints1[good_matches[0].queryIdx].pt;
+		cv::Point pt2 = keypoints2[good_matches[0].trainIdx].pt;
+		std::cout << "img1 x: " << pt1.y << std::endl;
+		std::cout << "img2 x: " << pt2.y << std::endl;
+		std::cout << " top: " << stat.at<int>(i,CC_STAT_TOP) << std::endl;
+		std::cout << " bot: " <<  (stat.at<int>(i,CC_STAT_TOP) + stat.at<int>(i,CC_STAT_HEIGHT)) << std::endl;
+		std::cout << i << std::endl;
+		if((pt1.y > stat.at<int>(i,CC_STAT_TOP)) && (pt2.x < (stat.at<int>(i,CC_STAT_TOP) + stat.at<int>(i,CC_STAT_HEIGHT))))
+		{
+			std::cout << i << std::endl;
+			top = stat.at<int>(i,CC_STAT_TOP);
+			bot = stat.at<int>(i,CC_STAT_TOP) + stat.at<int>(i,CC_STAT_HEIGHT);
+			d = ((w - pt1.x) + pt2.x)/2;
+			std::cout << i << " blob top: " << top << std::endl;
+			std::cout << i << " blob bot: " << bot << std::endl;
+			std::cout << i << " d: " << d << std::endl;
+			std::cout << "Keypoint 1: " << keypoints1[good_matches[0].queryIdx].pt << std::endl;
+			std::cout << "Keypoint 2: " << keypoints2[good_matches[0].trainIdx].pt << std::endl;
+			break;
+		}
+	     
+	}
+	std::cout << "ja sai" << std::endl;
 }
 
 int vertically_allign_calib(cv::Mat &img1, cv::Mat &img2)
@@ -353,6 +427,70 @@ cv::Mat horizontal_stitching_apply(cv::Mat &img1, cv::Mat &img2,int avg)
 	return outputBuff;
 }	
 	
+cv::Mat horizontal_line_stitching_apply2(cv::Mat &img1, cv::Mat &img2,int avg, cv::Mat mask1, cv::Mat mask2)
+{
+	cv::Mat output = img1.clone();
+	int top, bot , d;
+	//Match features and get the areas to line stitch
+    getLines(img1, img2, mask1, mask2, top, bot , d );
+  
+	//Create buffer
+	int right = img2.cols - avg;
+    int borderType = cv::BORDER_CONSTANT;
+    int no = 0;
+    int buff = 0;
+    cv::Scalar value(255,255,255);
+	if(img2.rows >img1.rows) buff = img2.rows-img1.rows;
+	
+	//Create Border
+
+	copyMakeBorder( img1, output, no, buff, no, right, borderType, value );
+	
+	//Create Mask
+	cv::Mat mask = cv::Mat::zeros(img2.size(), CV_8U);
+	cv::Mat mask_output = cv::Mat::zeros(output.size(), CV_8U);
+	cv::Mat img2_gray, output_gray;
+	cv::cvtColor( img2, img2_gray, cv::COLOR_RGB2GRAY );
+	cv::cvtColor( output, output_gray, cv::COLOR_RGB2GRAY);
+	
+	mask.setTo(255, img2_gray > 0);
+    mask_output.setTo(255, output_gray > 0);
+    mask_output.setTo(0,output_gray == 255);
+    cv::Mat outputBuff = output.clone();
+    
+    outputBuff.setTo(cv::Scalar(255,255,255));
+    output.copyTo(outputBuff,mask_output);
+    
+	
+	int gap = 1;
+	int line = round((img2.rows/gap));
+	std::cout << line << std::endl;
+	int remainder = round((img2.rows % gap)); 	
+	
+	std::cout << "el erro es:top:  "<< top << std::endl;
+	std::cout << "el erro es bot:  "<< bot << std::endl;
+	for(int i=0; i<top; i++)
+	{
+		
+		img2(cv::Rect(0,i*gap,img2.cols,gap)).copyTo(outputBuff(cv::Rect(img1.cols-avg,i*gap,img2.cols,gap)),mask(cv::Rect(0,i*gap,img2.cols,gap)));
+	}	
+	std::cout << "aqui" << std::endl;
+	for(int i=top; i<bot; i++)
+	{
+		
+		img2(cv::Rect(0,i*gap,img2.cols,gap)).copyTo(outputBuff(cv::Rect(img1.cols-d,i*gap,img2.cols,gap)),mask(cv::Rect(0,i*gap,img2.cols,gap)));
+	}	
+	std::cout << "ou aqui" << std::endl;
+	for(int i=bot; i<outputBuff.rows; i++)
+	{
+		
+		img2(cv::Rect(0,i*gap,img2.cols,gap)).copyTo(outputBuff(cv::Rect(img1.cols-avg,i*gap,img2.cols,gap)),mask(cv::Rect(0,i*gap,img2.cols,gap)));
+	}	
+	std::cout << "afinal nao" << std::endl;
+	
+	return outputBuff;
+}	
+	
 cv::Mat horizontal_line_stitching_apply(cv::Mat &img1, cv::Mat &img2,int avg)
 {
 cv::Mat output = img1.clone();
@@ -384,20 +522,19 @@ cv::Mat output = img1.clone();
     outputBuff.setTo(cv::Scalar(255,255,255));
     output.copyTo(outputBuff,mask_output);
 	
-	int gap = 30;
+	int gap = 1;
 	int line = round((img2.rows/gap));
 	int remainder = round((img2.rows % gap)); 	
 	
 	for(int i=0; i<line-1; i++)
 	{
 		
-		avg	+= 10;
+		avg	+= 0.1;
 		img2(cv::Rect(0,i*gap,img2.cols,gap)).copyTo(outputBuff(cv::Rect(img1.cols-avg,i*gap,img2.cols,gap)),mask(cv::Rect(0,i*gap,img2.cols,gap)));
 	}	
 	
-	return output;
-}	
-	
+	return outputBuff;
+}		
 cv::Mat horizontal_line_stitching(cv::Mat &img1, cv::Mat &img2)
 {
 	vector<Point2f> corners1, corners2;
@@ -458,6 +595,39 @@ int width= mat.size().width;
 for(int i=0;i<height;i+=dist)
   cv::line(mat,Point(0,i),Point(width,i),cv::Scalar(255,255,255));
 
+}
+
+void getMask(cv::Mat frame1, cv::Mat frame2, cv::Mat &mask)
+{
+	cv::cvtColor(frame1, frame1, cv::COLOR_BGR2GRAY);
+	cv::cvtColor(frame2, frame2, cv::COLOR_BGR2GRAY);
+	
+	//create Background Subtractor objects
+    Ptr<BackgroundSubtractor> pBackSub;
+    
+    pBackSub = createBackgroundSubtractorMOG2(500,200,true);
+    //pBackSub = createBackgroundSubtractorKNN();
+    
+    //update the background model
+    cv::Mat fgMask;
+    
+    
+    pBackSub->apply(frame1, fgMask);
+    pBackSub->apply(frame2, fgMask);
+    
+    //show the current frame and the fg masks
+    cv::Mat diffrence = frame1 - frame2;
+ 
+    mask = cv::Mat::zeros(diffrence.size(), CV_8U);
+    
+    mask.setTo(255, diffrence > 25);
+
+    //Morphologic operations
+    cv::Mat element = getStructuringElement(MORPH_RECT,Size(20,20),Point(9,9));
+    cv::morphologyEx(mask,mask,MORPH_OPEN,element);
+    cv::morphologyEx(mask,mask,MORPH_CLOSE,element);
+    cv::morphologyEx(mask,mask,MORPH_DILATE,element);
+    
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
@@ -633,16 +803,48 @@ int main()
         vertically_allign_apply(imgL_warp, imgR_warp, avg_v);
         
         //Match features for analyses 
-        match_features(imgL_warp, imgR_warp, img_matches);
+        match_features2(imgL_warp, imgR_warp, img_matches);
         
         //Draw horizontal evaluation grid
         draw_grid(img_matches);
         
         //Stich images
-        cv::Mat img_horz = horizontal_stitching_apply(imgL_warp, imgR_warp, avg_h);
-        //cv::Mat img_horz = horizontal_line_stitching_apply(imgL_warp, imgR_warp, avg_h);
-        saveimage(imgL_warp);
-		saveimage(imgR_warp);
+        
+        //Needs two frames to calculate the background subtraction
+        bool stitch;
+        std::cout << "Type of stitching? (only for sample) 0- Direct 1- Line " << std::endl; // Type a number and press enter
+		cin >> stitch;
+		
+		cv::Mat img_horz;
+        if(stitch)
+		{
+			cv::Mat framechessL = cv::imread("../Images/L1_squarefloor.jpg");
+			cv::Mat framechessR = cv::imread("../Images/R1_squarefloor.jpg");
+			
+			cv::Mat framechessL_warp;
+			cv::Mat framechessR_warp;
+			//warp images to the same plane
+			cv::warpPerspective(framechessL, framechessL_warp, Ht_L, mask_L);
+			cv::warpPerspective(framechessR, framechessR_warp, Ht_R, mask_R);
+			
+			//Allign features vertically
+			vertically_allign_apply(framechessL_warp, framechessR_warp, avg_v);
+			
+			cv::Mat mask, mask2;
+	
+			getMask(framechessL_warp,imgL_warp,mask);
+			getMask(framechessR_warp,imgR_warp,mask2);
+			
+			img_horz = horizontal_line_stitching_apply2(imgL_warp, imgR_warp, avg_h, mask, mask2);
+			//img_horz = horizontal_line_stitching_apply(imgL_warp, imgR_warp, avg_h);
+		}else
+		{
+			img_horz = horizontal_stitching_apply(imgL_warp, imgR_warp, avg_h);
+		}
+			
+			
+        //saveimage(imgL_warp);
+		//saveimage(imgR_warp);
         
 		cv::imshow("Left image warped",imgL_warp);
 		cv::imshow("Right image warped",imgR_warp);
