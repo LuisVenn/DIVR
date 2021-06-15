@@ -641,8 +641,8 @@ int main()
         //Stich images
         cv::Mat img_horz = horizontal_stitching_apply(imgL_warp, imgR_warp, avg_h);
         //cv::Mat img_horz = horizontal_line_stitching_apply(imgL_warp, imgR_warp, avg_h);
-        saveimage(img_horz);
-		//saveimage(imgR_warp);
+        saveimage(imgL_warp);
+		saveimage(imgR_warp);
         
 		cv::imshow("Left image warped",imgL_warp);
 		cv::imshow("Right image warped",imgR_warp);

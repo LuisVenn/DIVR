@@ -28,7 +28,7 @@ void match_features(cv::Mat &img1, cv::Mat &img2, cv::Mat &output, cv::Mat mask1
 	detector->detectAndCompute( img2, mask2, keypoints2, descriptors2 );
 
 	//Matching FEatures
-	BFMatcher matcher(NORM_L2);
+	BFMatcher matcher(NORM_HAMMING);
 	//matcher = cv::BFMatcher::create(cv::NORM_HAMMING);
 	std::vector<vector<DMatch> > matches;
 
@@ -38,21 +38,56 @@ void match_features(cv::Mat &img1, cv::Mat &img2, cv::Mat &output, cv::Mat mask1
 	std::vector<DMatch> match2;
 	int i2 = 0;
 	
-	match1.push_back(matches[0][0]);
-	for(int i=1; i<matches.size(); i++)
-	{
-		if( matches[i][0].distance < match1[0].distance ){
-			match1[0]=matches[i][0];
+	//match1.push_back(matches[0][0]);
+	//for(int i=1; i<matches.size(); i++)
+	//{
+		//if( matches[i][0].distance < match1[0].distance ){
+			//match1[0]=matches[i][1];
 			
-			
-		}
+		//}
 		
-	}
-	
-	cv::drawMatches(img1, keypoints1, img2, keypoints2, match1, output);
+	//}
+		//for(int i=0; i<matches.size(); i++)
+	//{
+		
+		//if( matches[i][0].distance < match1[0].distance )
+		//{
+			//match1.push_back(matches[i][0]);
+			//match2.push_back(matches[i][1]);
+	    //}
+	//}
+	//-- Filter matches using the Lowe's ratio test
+    const float ratio_thresh = 0.7f;
+    std::vector<DMatch> good_matches;
+    std::vector<DMatch> query;
+    std::vector<DMatch> train;
+    
+    
+    for (size_t i = 0; i < matches.size(); i++)
+    {
+		std::cout << matches[i][0].distance << "   " << matches[i][1].distance << std::endl;
+        if (matches[i][0].distance < 70)
+        {
+			
+			
+            good_matches.push_back(matches[i][0]);
+            std::cout << "Query distance: " << matches[good_matches[i2].queryIdx][0].distance << std::endl;
+            std::cout << "Train distance: " << matches[good_matches[i2].trainIdx][1].distance << std::endl;
+            std::cout << "i: " << i << std::endl;
+            std::cout << "Keypoint 1: " << keypoints1[good_matches[i2].queryIdx].pt << std::endl;
+			std::cout << "Keypoint 2: " << keypoints2[good_matches[i2].trainIdx].pt << std::endl;
+			std::cout << "Good match distance: " << good_matches[i2].distance << std::endl;
+			 std::cout << "---------------------------" << std::endl;
+			i2+=1;
+        }
+    }
+  
+   	
+   
+   cv::drawMatches(img1, keypoints1, img2, keypoints2, good_matches, output);
 }
 
-void getMask(cv::Mat &frame1, cv::Mat &frame2, cv::Mat &mask)
+void getMask(cv::Mat frame1, cv::Mat frame2, cv::Mat &mask)
 {
 	cv::cvtColor(frame1, frame1, cv::COLOR_BGR2GRAY);
 	cv::cvtColor(frame2, frame2, cv::COLOR_BGR2GRAY);
@@ -66,12 +101,13 @@ void getMask(cv::Mat &frame1, cv::Mat &frame2, cv::Mat &mask)
     //update the background model
     cv::Mat fgMask;
     
+    
     pBackSub->apply(frame1, fgMask);
     pBackSub->apply(frame2, fgMask);
     
     //show the current frame and the fg masks
-
-    cv::Mat diffrence = frame1 -frame2;
+    cv::Mat diffrence = frame1 - frame2;
+ 
     mask = cv::Mat::zeros(diffrence.size(), CV_8U);
     
     mask.setTo(255, diffrence > 25);
@@ -81,6 +117,7 @@ void getMask(cv::Mat &frame1, cv::Mat &frame2, cv::Mat &mask)
     cv::morphologyEx(mask,mask,MORPH_OPEN,element);
     cv::morphologyEx(mask,mask,MORPH_CLOSE,element);
     cv::morphologyEx(mask,mask,MORPH_DILATE,element);
+    
 }
 
 int main(){
@@ -99,6 +136,13 @@ int main(){
 	frame1 = cv::imread("./Images/L1_squarefloor.jpg");
 	frame22 = cv::imread("./Images/R4_squarefloor.jpg");
 	frame12 = cv::imread("./Images/R1_squarefloor.jpg");
+	
+	//frame1 = cv::imread("./Images/leftchess.jpg");
+	//frame2 = cv::imread("./Images/left.jpg");
+	
+	//frame12 = cv::imread("./Images/rightchess.jpg");
+	//frame22 = cv::imread("./Images/right.jpg");
+	
 	
 	cv::Mat mask, mask2;
 	
