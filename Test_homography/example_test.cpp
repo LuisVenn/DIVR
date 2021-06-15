@@ -296,9 +296,8 @@ void getLines(cv::Mat img1, cv::Mat img2, cv::Mat mask1, cv::Mat mask2, int &top
    
 	cv::Mat stat,centroid,mask3; //para que preciso da mask3??
 	int nLabels = connectedComponentsWithStats(mask1, mask3, stat,centroid,8, CV_16U);
-	vector<Rect> rComp;
-	std::cout << nLabels <<std::endl;
 	int w = img1.cols;
+	
 	for (int i=1;i<nLabels;i++)
 	{
 		cv::Point pt1 = keypoints1[good_matches[0].queryIdx].pt;
@@ -308,12 +307,13 @@ void getLines(cv::Mat img1, cv::Mat img2, cv::Mat mask1, cv::Mat mask2, int &top
 		std::cout << " top: " << stat.at<int>(i,CC_STAT_TOP) << std::endl;
 		std::cout << " bot: " <<  (stat.at<int>(i,CC_STAT_TOP) + stat.at<int>(i,CC_STAT_HEIGHT)) << std::endl;
 		std::cout << i << std::endl;
-		if((pt1.y > stat.at<int>(i,CC_STAT_TOP)) && (pt2.x < (stat.at<int>(i,CC_STAT_TOP) + stat.at<int>(i,CC_STAT_HEIGHT))))
+		if((pt1.y > stat.at<int>(i,CC_STAT_TOP)) && (pt1.y < (stat.at<int>(i,CC_STAT_TOP) + stat.at<int>(i,CC_STAT_HEIGHT))))
 		{
 			std::cout << i << std::endl;
 			top = stat.at<int>(i,CC_STAT_TOP);
 			bot = stat.at<int>(i,CC_STAT_TOP) + stat.at<int>(i,CC_STAT_HEIGHT);
-			d = ((w - pt1.x) + pt2.x)/2;
+			d = ((w - pt1.x) + pt2.x)
+			;
 			std::cout << i << " blob top: " << top << std::endl;
 			std::cout << i << " blob bot: " << bot << std::endl;
 			std::cout << i << " d: " << d << std::endl;
@@ -424,7 +424,7 @@ cv::Mat horizontal_stitching_apply(cv::Mat &img1, cv::Mat &img2,int avg)
 	
 	
 	//If want to show ghost change to outputGhost
-	return outputBuff;
+	return outputGhost;
 }	
 	
 cv::Mat horizontal_line_stitching_apply2(cv::Mat &img1, cv::Mat &img2,int avg, cv::Mat mask1, cv::Mat mask2)
@@ -435,7 +435,11 @@ cv::Mat horizontal_line_stitching_apply2(cv::Mat &img1, cv::Mat &img2,int avg, c
     getLines(img1, img2, mask1, mask2, top, bot , d );
   
 	//Create buffer
-	int right = img2.cols - avg;
+	int right;
+	if (d > avg)
+		right = img2.cols - avg;
+	else
+		right = img2.cols - d;
     int borderType = cv::BORDER_CONSTANT;
     int no = 0;
     int buff = 0;
@@ -467,21 +471,23 @@ cv::Mat horizontal_line_stitching_apply2(cv::Mat &img1, cv::Mat &img2,int avg, c
 	std::cout << line << std::endl;
 	int remainder = round((img2.rows % gap)); 	
 	
-	std::cout << "el erro es:top:  "<< top << std::endl;
-	std::cout << "el erro es bot:  "<< bot << std::endl;
+	std::cout << "top:  "<< top << std::endl;
+	std::cout << "bot:  "<< bot << std::endl;
+	std::cout << "avg:  "<< avg << std::endl;
+	std::cout << "d:  "<< d << std::endl;
 	for(int i=0; i<top; i++)
 	{
 		
 		img2(cv::Rect(0,i*gap,img2.cols,gap)).copyTo(outputBuff(cv::Rect(img1.cols-avg,i*gap,img2.cols,gap)),mask(cv::Rect(0,i*gap,img2.cols,gap)));
 	}	
+	
 	std::cout << "aqui" << std::endl;
 	for(int i=top; i<bot; i++)
 	{
-		
 		img2(cv::Rect(0,i*gap,img2.cols,gap)).copyTo(outputBuff(cv::Rect(img1.cols-d,i*gap,img2.cols,gap)),mask(cv::Rect(0,i*gap,img2.cols,gap)));
 	}	
 	std::cout << "ou aqui" << std::endl;
-	for(int i=bot; i<outputBuff.rows; i++)
+	for(int i=bot; i<img2.rows; i++)
 	{
 		
 		img2(cv::Rect(0,i*gap,img2.cols,gap)).copyTo(outputBuff(cv::Rect(img1.cols-avg,i*gap,img2.cols,gap)),mask(cv::Rect(0,i*gap,img2.cols,gap)));
