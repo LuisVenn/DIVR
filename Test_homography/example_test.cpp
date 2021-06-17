@@ -195,32 +195,21 @@ void getLines(cv::Mat img1, cv::Mat img2, cv::Mat mask1, cv::Mat mask2, vector<b
 	
 	sort(sorted_matches.begin(),sorted_matches.end(),organiza);
 	
-	//TEST : COUT COORDINATES TO COMPARE SORTNESS
-	  for (size_t i = 0; i < sorted_matches.size(); i++)
-    {
-		std::cout << "Keypoint 1: " << keypoints1[sorted_matches[i].queryIdx].pt << std::endl;
-		std::cout << "Keypoint 2: " << keypoints2[sorted_matches[i].trainIdx].pt << std::endl;
-		std::cout << "Distance: " << sorted_matches[i].distance << std::endl;
-		std::cout << "--------------------" << std::endl;
-		if (sorted_matches[i].distance < 45)
-		{
-			good_matches.push_back(sorted_matches[i]);
-		}
-    }
+	
    	std::cout << "--------------------" << std::endl;
    	std::cout << "----Good matches----" << std::endl;
    	std::cout << "--------------------" << std::endl;
    	
    	
-   	for (size_t i = 0; i < good_matches.size(); i++)
+   	for (size_t i = 0; i < sorted_matches.size(); i++)
     {
 		if (sorted_matches[i].distance < 45)
 		{
-			std::cout << "Keypoint 1: " << keypoints1[good_matches[i].queryIdx].pt << std::endl;
-			std::cout << "Keypoint 2: " << keypoints2[good_matches[i].trainIdx].pt << std::endl;
-			std::cout << "Distance: " << good_matches[i].distance << std::endl;
-			std::cout << "--------------------" << std::endl;
 			good_matches.push_back(sorted_matches[i]);
+			std::cout << "Keypoint 1: " << keypoints1[sorted_matches[i].queryIdx].pt << std::endl;
+			std::cout << "Keypoint 2: " << keypoints2[sorted_matches[i].trainIdx].pt << std::endl;
+			std::cout << "Distance: " << sorted_matches[i].distance << std::endl;
+			std::cout << "--------------------" << std::endl;
 		}
     }
    
@@ -230,32 +219,36 @@ void getLines(cv::Mat img1, cv::Mat img2, cv::Mat mask1, cv::Mat mask2, vector<b
 	int nLabels = connectedComponentsWithStats(mask1, mask3, stat,centroid,8, CV_16U);
 	int w = img1.cols;
 	blob blob_buff;
+	
+	std::cout << "CHECK IN WICH BLOBS ARE THE FEATURES " << std::endl;
 	for (size_t imatch = 0; imatch < good_matches.size(); imatch++)
     {
 		cv::Point pt1 = keypoints1[good_matches[imatch].queryIdx].pt;
 		cv::Point pt2 = keypoints2[good_matches[imatch].trainIdx].pt;
-		
+		std::cout << "------------------------------------" << std::endl;
+		std::cout << "Keypoint 1: " << keypoints1[good_matches[imatch].queryIdx].pt << std::endl;
+		std::cout << "Keypoint 2: " << keypoints2[good_matches[imatch].trainIdx].pt << std::endl;
 		for (int i=1;i<nLabels;i++)
 		{
+			std::cout << "objeto " << i << " limites x: " << stat.at<int>(i,CC_STAT_LEFT) << "-" << (stat.at<int>(i,CC_STAT_LEFT) + stat.at<int>(i,CC_STAT_WIDTH)) << "Check: " << ((pt1.x >= stat.at<int>(i,CC_STAT_LEFT)) && (pt1.x <= (stat.at<int>(i,CC_STAT_LEFT) + stat.at<int>(i,CC_STAT_WIDTH)))) << std::endl;
+			std::cout << "objeto " << i << " limites y: " << stat.at<int>(i,CC_STAT_TOP) << "-" <<  (stat.at<int>(i,CC_STAT_TOP) + stat.at<int>(i,CC_STAT_HEIGHT)) << "Check: " << ((pt1.y >= stat.at<int>(i,CC_STAT_TOP)) && (pt1.y <= (stat.at<int>(i,CC_STAT_TOP) + stat.at<int>(i,CC_STAT_HEIGHT)))) << std::endl;
 			
-			if((pt1.x > stat.at<int>(i,CC_STAT_LEFT)) && (pt1.x < (stat.at<int>(i,CC_STAT_LEFT) + stat.at<int>(i,CC_STAT_WIDTH)) &&(pt1.y > stat.at<int>(i,CC_STAT_TOP)) && (pt1.y < (stat.at<int>(i,CC_STAT_TOP) + stat.at<int>(i,CC_STAT_HEIGHT)))))
+			if((pt1.x >= stat.at<int>(i,CC_STAT_LEFT)) && (pt1.x <= (stat.at<int>(i,CC_STAT_LEFT) + stat.at<int>(i,CC_STAT_WIDTH)) && (pt1.y >= stat.at<int>(i,CC_STAT_TOP)) && (pt1.y <= (stat.at<int>(i,CC_STAT_TOP) + stat.at<int>(i,CC_STAT_HEIGHT)))))
 			{
 				blob_buff.top = stat.at<int>(i,CC_STAT_TOP);
 				blob_buff.bot = stat.at<int>(i,CC_STAT_TOP) + stat.at<int>(i,CC_STAT_HEIGHT);
 				blob_buff.d = ((w - pt1.x) + pt2.x);
 				blobs.push_back(blob_buff);
-				//std::cout << i << " blob top: " << top[i] << std::endl;
-				//std::cout << i << " blob bot: " << bot[i] << std::endl;
-				//std::cout << i << " d: " << d[i] << std::endl;
-				//std::cout << "Keypoint 1: " << keypoints1[good_matches[i].queryIdx].pt << std::endl;
-				//std::cout << "Keypoint 2: " << keypoints2[good_matches[i].trainIdx].pt << std::endl;
+				std::cout << i << " blob top: " << blob_buff.top << std::endl;
+				std::cout << i << " blob bot: " << blob_buff.bot << std::endl;
+				std::cout << i << " d: " << blob_buff.d << std::endl;
+				
 				break;
 			}	 
 		}	
 	}
 	sort(blobs.begin(),blobs.end(),organizablob);
-	std::cout << "number of good features found in blobs" << blobs.size() << std::endl;
-	std::cout << "ja sai" << std::endl;
+	std::cout << "number of good features found in blobs: " << blobs.size() << std::endl;
 }
 
 int vertically_allign_calib(cv::Mat &img1, cv::Mat &img2)
@@ -361,13 +354,17 @@ cv::Mat horizontal_line_stitching_apply2(cv::Mat &img1, cv::Mat &img2,int avg, c
 	
 	//Match features and get the areas to line stitch
     getLines(img1, img2, mask1, mask2, blobs );
-    int dMax = max_element(blobs.begin(), blobs.end()); 
+    
+    auto it = std::min_element(blobs.begin(), blobs.end(), [](const blob& a,const blob& b) { return a.d < b.d; });
+    
+    int dMin = it[0].d; 
+    std::cout << "dmin: " << dMin << std::endl;
 	//Create buffer
 	int right;
-	if (dMax > avg)
+	if (dMin > avg)
 		right = img2.cols - avg;
 	else
-		right = img2.cols - dMax;
+		right = img2.cols - dMin;
     int borderType = cv::BORDER_CONSTANT;
     int no = 0;
     int buff = 0;
@@ -399,20 +396,33 @@ cv::Mat horizontal_line_stitching_apply2(cv::Mat &img1, cv::Mat &img2,int avg, c
 	int remainder = round((img2.rows % gap)); 	
 
 	int top = 0,bot,d;
-	int i =0;
+	int i = 0;
+	std::cout << "i fora: " << i << std::endl;
 	
-	for(int i2=0;i2 < blobs.size();i++)
+	for(int i2=0;i2 < blobs.size();i2++)
 	{
-		if(i2>0 && blobs[i2-1].bot > blobs[i2].top)
-			continue;
-			
-		if(i == 0 || (i < blobs[i2].top ) || (i > blobs[blobs.size()].bot))
+		std::cout << "i: " << i << std::endl;
+		std::cout << "blob " << i2 << " top :" << blobs[i2].top << std::endl;
+		std::cout << "blob " << i2 << " bot :" << blobs[i2].bot << std::endl;
+		std::cout << "blob " << i2 << " d :" << blobs[i2].d << std::endl;
+		if((i2>0 && blobs[i2-1].bot > blobs[i2].top) || blobs.size() == 0) 
+		{
+			if(i2 == blobs.size()-1 || blobs.size() == 0)
+			{
+				for(i; i<img2.rows; i++)
+				{
+					img2(cv::Rect(0,i*gap,img2.cols,gap)).copyTo(outputBuff(cv::Rect(img1.cols-avg,i*gap,img2.cols,gap)),mask(cv::Rect(0,i*gap,img2.cols,gap)));
+				}
+			break;
+			}else continue;			
+		}	
+		
+		if(i < blobs[i2].top )
 		{
 			for(i; i<blobs[i2].top; i++)
 			{
 				img2(cv::Rect(0,i*gap,img2.cols,gap)).copyTo(outputBuff(cv::Rect(img1.cols-avg,i*gap,img2.cols,gap)),mask(cv::Rect(0,i*gap,img2.cols,gap)));
-				if(i == outputBuff.rows)
-					break;
+				
 			}	
 		}
 		
@@ -420,10 +430,11 @@ cv::Mat horizontal_line_stitching_apply2(cv::Mat &img1, cv::Mat &img2,int avg, c
 		{
 			for(i; i<blobs[i2].bot; i++)
 			{
+				std::cout << "deu" << std::endl;
 				img2(cv::Rect(0,i*gap,img2.cols,gap)).copyTo(outputBuff(cv::Rect(img1.cols-blobs[i2].d,i*gap,img2.cols,gap)),mask(cv::Rect(0,i*gap,img2.cols,gap)));
-			}		
+				std::cout << "merda" << std::endl;
+			}	
 		}
-		
 	}
 	
 	return outputBuff;
