@@ -105,7 +105,7 @@ cv::Size getTransform(cv::Mat &img1, vector<Point2f> &corners1, vector<Point2f> 
 	return size_mask;
 }
 
-void estimateTransform(cv::Mat imgL,cv::Mat imgR, vector<Point2f> &cornersL, vector<Point2f> &cornersR, cv::Mat &Ht_L, cv::Mat &Ht_R, cv::Size &mask_L, cv::Size &mask_R, float k)
+void estimateTransform(cv::Mat imgL,cv::Mat imgR, vector<Point2f> &cornersL, vector<Point2f> &cornersR, cv::Mat &Ht_L, cv::Mat &Ht_R, cv::Size &warpedL_size, cv::Size &warpedR_size, float k)
 {
 	
 	vector<Point2f> cornersC_estimated = cornersL;
@@ -115,8 +115,8 @@ void estimateTransform(cv::Mat imgL,cv::Mat imgR, vector<Point2f> &cornersL, vec
 	multVector(cornersC_estimated,k);
 	sumVectors(cornersC_estimated,cornersR);
 	std::cout << cornersC_estimated << std::endl;
-	mask_L = getTransform(imgL, cornersL, cornersC_estimated, Ht_L);
-	mask_R = getTransform(imgR, cornersR, cornersC_estimated, Ht_R);
+	warpedL_size = getTransform(imgL, cornersL, cornersC_estimated, Ht_L);
+	warpedR_size = getTransform(imgR, cornersR, cornersC_estimated, Ht_R);
 }
 
 void saveimage(cv::Mat &img1)
@@ -245,12 +245,13 @@ void getLines(cv::Mat img1, cv::Mat img2, cv::Mat mask1, cv::Mat mask2, Matches_
 	int w = img1.cols;
 	blob blob_buff;
 	
+	
 	for (size_t imatch = 0; imatch < matches_coords.L.size(); imatch++)
     {
 		cv::Point pt1 = matches_coords.L[imatch];
 		cv::Point pt2 = matches_coords.R[imatch];
 		std::cout << "------------------------------------" << std::endl;
-		std::cout << "Keypoint 1: " << pt1 << "x:" << pt1.x << " y:" << pt1.y << std::endl;
+		std::cout << "Keypoint 1: " << pt1 << std::endl;
 		std::cout << "Keypoint 2: " << pt2 << std::endl;
 		for (int i=1;i<nLabels;i++)
 		{
@@ -604,8 +605,8 @@ int main()
 	
 	if(calibrationImg)
 	{
-		pathL = "../Images/squarefloor2/L1_squarefloor2_bgbox2.jpg"; //!!!!!!!!!!!!!!!!!!!!
-		pathR = "../Images/squarefloor2/R1_squarefloor2_bgbox2.jpg"; //!!!!!!!!!!!!!!!!!!!!!!!
+		pathL = "../Images/squarefloor2/L1_squarefloor2_chess1.jpg"; //!!!!!!!!!!!!!!!!!!!!
+		pathR = "../Images/squarefloor2/R1_squarefloor2_chess1.jpg"; //!!!!!!!!!!!!!!!!!!!!!!!
 		pathC = "../Images/squarefloor2/R1_squarefloor2_chess1.jpg";
 	}else
 	{
@@ -634,8 +635,8 @@ int main()
 	
 	//Get homography matrix and mask size
 	cv::Mat Ht_L, Ht_R;
-	cv::Size mask_L, mask_R;	
-	int mask_L_height, mask_L_width , mask_R_height, mask_R_width, avg_v, avg_h;;
+	cv::Size warpedL_size, warpedR_size;	
+	int warpedL_height, warpedL_width , warpedR_height, warpedR_width, avg_v, avg_h;;
 	bool newCalib = 0;
 	bool estimate, save;
 	
@@ -660,8 +661,8 @@ int main()
 		if(!estimate)
 		{
 			//Get the direct transform
-			mask_L = getTransform(imgL,cornersL,cornersC,Ht_L); //returns mask and the matrix H
-			mask_R = getTransform(imgR,cornersR,cornersC,Ht_R);
+			warpedL_size = getTransform(imgL,cornersL,cornersC,Ht_L); //returns mask and the matrix H
+			warpedR_size = getTransform(imgR,cornersR,cornersC,Ht_R);
 		}else
 		{
 			//estimate the transform for a 0 to 45 degrees
@@ -671,13 +672,13 @@ int main()
 			cin >> k;
 			
 			k = k/45;
-			estimateTransform(imgL, imgR, cornersL, cornersR, Ht_L, Ht_R, mask_L, mask_R, k);
+			estimateTransform(imgL, imgR, cornersL, cornersR, Ht_L, Ht_R, warpedL_size, warpedR_size, k);
 			std::cout << Ht_L << std::endl;
 		}
 		
 		//Warp the prespective to get the value of the horizontal and vertical displacement
-		cv::warpPerspective(imgL, imgL_warp, Ht_L, mask_L);
-		cv::warpPerspective(imgR, imgR_warp, Ht_R, mask_R);
+		cv::warpPerspective(imgL, imgL_warp, Ht_L, warpedL_size);
+		cv::warpPerspective(imgR, imgR_warp, Ht_R, warpedR_size);
 			
 		avg_v = vertically_allign_calib(imgL_warp, imgR_warp);
 		avg_h = horizontal_stitching_calib(imgL_warp, imgR_warp);
@@ -689,18 +690,18 @@ int main()
 		if(save)
 		{
 			//Save new calibration parameters
-			mask_L_height = mask_L.height;
-			mask_L_width = mask_L.width;
-			mask_R_height = mask_R.height;
-			mask_R_width = mask_R.width;
+			warpedL_height = warpedL_size.height;
+			warpedL_width = warpedL_size.width;
+			warpedR_height = warpedR_size.height;
+			warpedR_width = warpedR_size.width;
 				
 			cv::FileStorage cv_file = cv::FileStorage("./Homography_params_squarefloor2.xml", cv::FileStorage::WRITE);
 			cv_file.write("Ht_L",Ht_L);
 			cv_file.write("Ht_R",Ht_R);
-			cv_file.write("mask_L_height",mask_L_height);
-			cv_file.write("mask_L_width",mask_L_width);
-			cv_file.write("mask_R_height",mask_R_height);
-			cv_file.write("mask_R_width",mask_R_width);
+			cv_file.write("warpedL_height",warpedL_height);
+			cv_file.write("warpedL_width",warpedL_width);
+			cv_file.write("warpedR_height",warpedR_height);
+			cv_file.write("warpedR_width",warpedR_width);
 			cv_file.write("avg_v",avg_v);
 			cv_file.write("avg_h",avg_h); 
 		}
@@ -711,17 +712,17 @@ int main()
 
 		fs["Ht_L"] >> Ht_L;
 		fs["Ht_R"] >> Ht_R;
-		fs["mask_L_height"] >> mask_L_height;
-		fs["mask_L_width"] >> mask_L_width; 
-		fs["mask_R_height"] >> mask_R_height;
-		fs["mask_R_width"] >> mask_R_width; 
+		fs["warpedL_height"] >> warpedL_height;
+		fs["warpedL_width"] >> warpedL_width; 
+		fs["warpedR_height"] >> warpedR_height;
+		fs["warpedR_width"] >> warpedR_width; 
 		fs["avg_v"] >> avg_v;
 		fs["avg_h"] >> avg_h; 
 		
-		mask_L.height = mask_L_height;
-        mask_L.width  = mask_L_width ;
-        mask_R.height = mask_R_height;
-        mask_R.width  = mask_R_width ;
+		warpedL_size.height = warpedL_height;
+        warpedL_size.width  = warpedL_width ;
+        warpedR_size.height = warpedR_height;
+        warpedR_size.width  = warpedR_width ;
 	}
 		
     for(int i{0}; i<imagesL.size(); i++)
@@ -732,8 +733,8 @@ int main()
 		
 		//FOR ANALYSIS PURPOSES
         //warp images to the same plane 
-        cv::warpPerspective(imgL, imgL_warp, Ht_L, mask_L);
-        cv::warpPerspective(imgR, imgR_warp, Ht_R, mask_R);
+        cv::warpPerspective(imgL, imgL_warp, Ht_L, warpedL_size);
+        cv::warpPerspective(imgR, imgR_warp, Ht_R, warpedR_size);
         
         //Allign features vertically
         vertically_allign_apply(imgL_warp, imgR_warp, avg_v);
@@ -770,18 +771,20 @@ int main()
 			
 			Matches_coordinates matches_coords_warped;
 			cv::Point2f coordsL_warped_buff, coordsR_warped_buff;
-			
-				cv::perspectiveTransform(matches_coords.L, matches_coords_warped.L, Ht_L);
-				cv::perspectiveTransform(matches_coords.R, matches_coords_warped.R, Ht_R);
-			
-			
-			
+		
 			//WARP IMAGES, FEATURES AND MASKS
+				//images
+			
+				//masks
 			cv::Mat maskL_warp;
 			cv::Mat maskR_warp;
 			
-			cv::warpPerspective(maskL, maskL_warp, Ht_L, mask_L);
-			cv::warpPerspective(maskR, maskR_warp, Ht_R, mask_R);
+			cv::warpPerspective(maskL, maskL_warp, Ht_L, warpedL_size);
+			cv::warpPerspective(maskR, maskR_warp, Ht_R, warpedR_size);
+			
+				//features coordinates
+			cv::perspectiveTransform(matches_coords.L, matches_coords_warped.L, Ht_L);
+			cv::perspectiveTransform(matches_coords.R, matches_coords_warped.R, Ht_R);
 			
 			//Allign features vertically
 			vertically_allign_apply(maskL_warp, maskR_warp, avg_v);
