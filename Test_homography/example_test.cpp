@@ -26,6 +26,11 @@ struct blob {
   int d;
 };
 
+struct Matches_coordinates {
+  vector<Point2f> L;
+  vector<Point2f> R;
+};
+
 //Vector algebra functions
 bool organiza (DMatch p1, DMatch p2) 
 { 
@@ -143,23 +148,28 @@ void match_features2(cv::Mat &img1, cv::Mat &img2, cv::Mat &output)
 	std::vector<vector<DMatch> > matches;
 
 	matcher.knnMatch(descriptors1, descriptors2, matches,2);
-
-	std::vector<DMatch> match1;
-	std::vector<DMatch> match2;
-	int i2 = 0;
 	
-	match1.push_back(matches[0][0]);
-	for(int i=1; i<matches.size(); i++)
-	{
-		if( matches[i][0].distance < match1[0].distance ){
-			match1[0]=matches[i][0];	
+	//get the best match
+	std::vector<DMatch> good_matches, sorted_matches;
+	
+    for (size_t i = 0; i < matches.size(); i++)
+    {
+		 sorted_matches.push_back(matches[i][0]);
+    }
+	
+	sort(sorted_matches.begin(),sorted_matches.end(),organiza);
+   	
+   	for (size_t i = 0; i < sorted_matches.size(); i++)
+    {
+		if (sorted_matches[i].distance < 45)
+		{
+			good_matches.push_back(sorted_matches[i]);
 		}
-	}
-	
-	cv::drawMatches(img1, keypoints1, img2, keypoints2, match1, output);
+    }
+    
+	cv::drawMatches(img1, keypoints1, img2, keypoints2, good_matches, output);
 }
-
-void getLines(cv::Mat img1, cv::Mat img2, cv::Mat mask1, cv::Mat mask2, vector<blob> &blobs)
+void getMatches(cv::Mat img1, cv::Mat img2, cv::Mat mask1, cv::Mat mask2, Matches_coordinates &matches_coords)
 {
 	//Features dectection and matching
 	Ptr<ORB> detector = cv::ORB::create();
@@ -168,7 +178,15 @@ void getLines(cv::Mat img1, cv::Mat img2, cv::Mat mask1, cv::Mat mask2, vector<b
 
 	detector->detectAndCompute( img1, mask1, keypoints1, descriptors1 );
 	detector->detectAndCompute( img2, mask2, keypoints2, descriptors2 );
-
+	
+	//cv::namedWindow("Left mask",cv::WINDOW_NORMAL);
+	//cv::resizeWindow("Left mask",960,536);
+	//cv::imshow("Left mask", mask1);
+	//cv::namedWindow("Right mask",cv::WINDOW_NORMAL);
+	//cv::resizeWindow("Right mask",960,536);
+	//cv::imshow("Right mask", mask2);
+	//cv::waitKey();
+	
 	//Matching Features
 	BFMatcher matcher(NORM_HAMMING);
 	//matcher = cv::BFMatcher::create(cv::NORM_HAMMING);
@@ -182,11 +200,10 @@ void getLines(cv::Mat img1, cv::Mat img2, cv::Mat mask1, cv::Mat mask2, vector<b
 	
 	//-- Filter matches using the Lowe's ratio test
     const float ratio_thresh = 0.7f;
-    std::vector<DMatch> good_matches, sorted_matches;
+    std::vector<DMatch> sorted_matches;
     std::vector<DMatch> query;
     std::vector<DMatch> train;
     
-   
     //get the best match
     for (size_t i = 0; i < matches.size(); i++)
     {
@@ -200,19 +217,27 @@ void getLines(cv::Mat img1, cv::Mat img2, cv::Mat mask1, cv::Mat mask2, vector<b
    	std::cout << "----Good matches----" << std::endl;
    	std::cout << "--------------------" << std::endl;
    	
-   	
    	for (size_t i = 0; i < sorted_matches.size(); i++)
     {
 		if (sorted_matches[i].distance < 45)
 		{
-			good_matches.push_back(sorted_matches[i]);
+			//good_matches.push_back(sorted_matches[i]);
+			matches_coords.L.push_back(keypoints1[sorted_matches[i].queryIdx].pt);
+			matches_coords.R.push_back(keypoints2[sorted_matches[i].trainIdx].pt);
 			std::cout << "Keypoint 1: " << keypoints1[sorted_matches[i].queryIdx].pt << std::endl;
 			std::cout << "Keypoint 2: " << keypoints2[sorted_matches[i].trainIdx].pt << std::endl;
 			std::cout << "Distance: " << sorted_matches[i].distance << std::endl;
 			std::cout << "--------------------" << std::endl;
 		}
     }
-   
+    //cv::Mat imgmatches;
+    //cv::drawMatches(img1, keypoints1, img2, keypoints2, good_matches, imgmatches);
+    //cv::imshow("Features matching",imgmatches);
+	//cv::waitKey();
+}
+
+void getLines(cv::Mat img1, cv::Mat img2, cv::Mat mask1, cv::Mat mask2, Matches_coordinates matches_coords, vector<blob> &blobs)
+{
    //In wich blobs are this features
    
 	cv::Mat stat,centroid,mask3; //para que preciso da mask3??
@@ -220,14 +245,13 @@ void getLines(cv::Mat img1, cv::Mat img2, cv::Mat mask1, cv::Mat mask2, vector<b
 	int w = img1.cols;
 	blob blob_buff;
 	
-	std::cout << "CHECK IN WICH BLOBS ARE THE FEATURES " << std::endl;
-	for (size_t imatch = 0; imatch < good_matches.size(); imatch++)
+	for (size_t imatch = 0; imatch < matches_coords.L.size(); imatch++)
     {
-		cv::Point pt1 = keypoints1[good_matches[imatch].queryIdx].pt;
-		cv::Point pt2 = keypoints2[good_matches[imatch].trainIdx].pt;
+		cv::Point pt1 = matches_coords.L[imatch];
+		cv::Point pt2 = matches_coords.R[imatch];
 		std::cout << "------------------------------------" << std::endl;
-		std::cout << "Keypoint 1: " << keypoints1[good_matches[imatch].queryIdx].pt << std::endl;
-		std::cout << "Keypoint 2: " << keypoints2[good_matches[imatch].trainIdx].pt << std::endl;
+		std::cout << "Keypoint 1: " << pt1 << "x:" << pt1.x << " y:" << pt1.y << std::endl;
+		std::cout << "Keypoint 2: " << pt2 << std::endl;
 		for (int i=1;i<nLabels;i++)
 		{
 			std::cout << "objeto " << i << " limites x: " << stat.at<int>(i,CC_STAT_LEFT) << "-" << (stat.at<int>(i,CC_STAT_LEFT) + stat.at<int>(i,CC_STAT_WIDTH)) << "Check: " << ((pt1.x >= stat.at<int>(i,CC_STAT_LEFT)) && (pt1.x <= (stat.at<int>(i,CC_STAT_LEFT) + stat.at<int>(i,CC_STAT_WIDTH)))) << std::endl;
@@ -347,18 +371,21 @@ cv::Mat horizontal_stitching_apply(cv::Mat &img1, cv::Mat &img2,int avg)
 	return outputGhost;
 }	
 	
-cv::Mat horizontal_line_stitching_apply2(cv::Mat &img1, cv::Mat &img2,int avg, cv::Mat mask1, cv::Mat mask2)
+cv::Mat horizontal_line_stitching_apply2(cv::Mat &img1, cv::Mat &img2,int avg, cv::Mat mask1, cv::Mat mask2, Matches_coordinates matches_coords)
 {
 	cv::Mat output = img1.clone();
 	vector<blob> blobs; 
 	
 	//Match features and get the areas to line stitch
-    getLines(img1, img2, mask1, mask2, blobs );
-    
-    auto it = std::min_element(blobs.begin(), blobs.end(), [](const blob& a,const blob& b) { return a.d < b.d; });
-    
-    int dMin = it[0].d; 
-    std::cout << "dmin: " << dMin << std::endl;
+    getLines(img1, img2, mask1, mask2, matches_coords, blobs );
+    int  dMin = avg + 1;
+    if (blobs.size() > 0)
+    {
+		auto it = std::min_element(blobs.begin(), blobs.end(), [](const blob& a,const blob& b) { return a.d < b.d; });
+		dMin = it[0].d; 
+		std::cout << "dmin: " << dMin << std::endl;
+    }
+  
 	//Create buffer
 	int right;
 	if (dMin > avg)
@@ -397,46 +424,54 @@ cv::Mat horizontal_line_stitching_apply2(cv::Mat &img1, cv::Mat &img2,int avg, c
 
 	int top = 0,bot,d;
 	int i = 0;
-	std::cout << "i fora: " << i << std::endl;
 	
-	for(int i2=0;i2 < blobs.size();i2++)
+	if(blobs.size() == 0)
 	{
-		std::cout << "i: " << i << std::endl;
-		std::cout << "blob " << i2 << " top :" << blobs[i2].top << std::endl;
-		std::cout << "blob " << i2 << " bot :" << blobs[i2].bot << std::endl;
-		std::cout << "blob " << i2 << " d :" << blobs[i2].d << std::endl;
-		if((i2>0 && blobs[i2-1].bot > blobs[i2].top) || blobs.size() == 0) 
+		for(i; i<img2.rows; i++)
 		{
-			if(i2 == blobs.size()-1 || blobs.size() == 0)
+			img2(cv::Rect(0,i*gap,img2.cols,gap)).copyTo(outputBuff(cv::Rect(img1.cols-avg,i*gap,img2.cols,gap)),mask(cv::Rect(0,i*gap,img2.cols,gap)));
+		}
+	}else{	
+		
+		for(int i2=0;i2 < blobs.size();i2++)
+		{
+			std::cout << "i: " << i << std::endl;
+			std::cout << "blob " << i2 << " top :" << blobs[i2].top << std::endl;
+			std::cout << "blob " << i2 << " bot :" << blobs[i2].bot << std::endl;
+			std::cout << "blob " << i2 << " d :" << blobs[i2].d << std::endl;
+			
+			if((i2>0 && blobs[i2-1].bot > blobs[i2].top)) 
 			{
-				for(i; i<img2.rows; i++)
+				if(i2 == blobs.size()-1)
+				{
+					for(i; i<img2.rows; i++)
+					{
+						img2(cv::Rect(0,i*gap,img2.cols,gap)).copyTo(outputBuff(cv::Rect(img1.cols-avg,i*gap,img2.cols,gap)),mask(cv::Rect(0,i*gap,img2.cols,gap)));
+					}
+				break;
+				}else continue;			
+			}	
+			
+			if(i < blobs[i2].top )
+			{
+				for(i; i<blobs[i2].top; i++)
 				{
 					img2(cv::Rect(0,i*gap,img2.cols,gap)).copyTo(outputBuff(cv::Rect(img1.cols-avg,i*gap,img2.cols,gap)),mask(cv::Rect(0,i*gap,img2.cols,gap)));
-				}
-			break;
-			}else continue;			
-		}	
-		
-		if(i < blobs[i2].top )
-		{
-			for(i; i<blobs[i2].top; i++)
+					
+				}	
+			}
+			
+			if(i == blobs[i2].top)
 			{
-				img2(cv::Rect(0,i*gap,img2.cols,gap)).copyTo(outputBuff(cv::Rect(img1.cols-avg,i*gap,img2.cols,gap)),mask(cv::Rect(0,i*gap,img2.cols,gap)));
-				
-			}	
-		}
-		
-		if(i == blobs[i2].top)
-		{
-			for(i; i<blobs[i2].bot; i++)
-			{
-				std::cout << "deu" << std::endl;
-				img2(cv::Rect(0,i*gap,img2.cols,gap)).copyTo(outputBuff(cv::Rect(img1.cols-blobs[i2].d,i*gap,img2.cols,gap)),mask(cv::Rect(0,i*gap,img2.cols,gap)));
-				std::cout << "merda" << std::endl;
-			}	
+				for(i; i<blobs[i2].bot; i++)
+				{
+			
+					img2(cv::Rect(0,i*gap,img2.cols,gap)).copyTo(outputBuff(cv::Rect(img1.cols-blobs[i2].d,i*gap,img2.cols,gap)),mask(cv::Rect(0,i*gap,img2.cols,gap)));
+					
+				}	
+			}
 		}
 	}
-	
 	return outputBuff;
 }	
 	
@@ -560,7 +595,7 @@ int main()
 	// Path of the folder containing checkerboard images
 	//std::string pathL = "./ImagesL/*.jpg"; //!!!!!!!!!!!!!!!!!!!!
 	//std::string pathR = "./ImagesR/*.jpg"; //!!!!!!!!!!!!!!!!!!!!!!!
-	//std::string pathC = "./ImagesC/*.jpg";
+	//std::string pathC = "./ImagesC/*.jpg"; 
 	bool calibrationImg;
 	std::cout << "Images to use? 1-chess 0-sample " << std::endl; // Type a number and press enter
 	cin >> calibrationImg;
@@ -569,14 +604,14 @@ int main()
 	
 	if(calibrationImg)
 	{
-		pathL = "../Images/L1_squarefloor.jpg"; //!!!!!!!!!!!!!!!!!!!!
-		pathR = "../Images/R1_squarefloor.jpg"; //!!!!!!!!!!!!!!!!!!!!!!!
-		pathC = "../Images/C1_squarefloor.jpg";
+		pathL = "../Images/squarefloor2/L1_squarefloor2_bgbox2.jpg"; //!!!!!!!!!!!!!!!!!!!!
+		pathR = "../Images/squarefloor2/R1_squarefloor2_bgbox2.jpg"; //!!!!!!!!!!!!!!!!!!!!!!!
+		pathC = "../Images/squarefloor2/R1_squarefloor2_chess1.jpg";
 	}else
 	{
-		pathL = "../Images/L4_squarefloor.jpg"; //!!!!!!!!!!!!!!!!!!!!
-		pathR = "../Images/R4_squarefloor.jpg"; //!!!!!!!!!!!!!!!!!!!!!!!
-		pathC = "../Images/C4_squarefloor.jpg";
+		pathL = "../Images/squarefloor2/L1_squarefloor2_box2.jpg"; //!!!!!!!!!!!!!!!!!!!!
+		pathR = "../Images/squarefloor2/R1_squarefloor2_box2.jpg"; //!!!!!!!!!!!!!!!!!!!!!!!
+		pathC = "../Images/squarefloor2/R1_squarefloor2_chess1.jpg";
 	}
 	
 	cv::glob(pathL, imagesL);
@@ -596,7 +631,7 @@ int main()
 	cv::imshow("Left image",imgL);
 	cv::imshow("Right image",imgR);
 	cv::imshow("Center image", imgC);
-		
+	
 	//Get homography matrix and mask size
 	cv::Mat Ht_L, Ht_R;
 	cv::Size mask_L, mask_R;	
@@ -659,7 +694,7 @@ int main()
 			mask_R_height = mask_R.height;
 			mask_R_width = mask_R.width;
 				
-			cv::FileStorage cv_file = cv::FileStorage("./Homography_params_squarefloor.xml", cv::FileStorage::WRITE);
+			cv::FileStorage cv_file = cv::FileStorage("./Homography_params_squarefloor2.xml", cv::FileStorage::WRITE);
 			cv_file.write("Ht_L",Ht_L);
 			cv_file.write("Ht_R",Ht_R);
 			cv_file.write("mask_L_height",mask_L_height);
@@ -672,7 +707,7 @@ int main()
 	}else
 	{
 		//Read pre-calibrated saved parameters
-		cv::FileStorage fs("./Homography_params_squarefloor.xml", cv::FileStorage::READ);
+		cv::FileStorage fs("./Homography_params_squarefloor2.xml", cv::FileStorage::READ);
 
 		fs["Ht_L"] >> Ht_L;
 		fs["Ht_R"] >> Ht_R;
@@ -695,7 +730,8 @@ int main()
 		imgL = cv::imread(imagesL[i]);
 		imgR = cv::imread(imagesR[i]);
 		
-        //warp images to the same plane
+		//FOR ANALYSIS PURPOSES
+        //warp images to the same plane 
         cv::warpPerspective(imgL, imgL_warp, Ht_L, mask_L);
         cv::warpPerspective(imgR, imgR_warp, Ht_R, mask_R);
         
@@ -718,29 +754,39 @@ int main()
 		
         if(lines)
 		{
-			//get backgorund images for subtraction
-			cv::Mat framechessL = cv::imread("../Images/L1_squarefloor.jpg");
-			cv::Mat framechessR = cv::imread("../Images/R1_squarefloor.jpg");
+			//get background images for subtraction
+			cv::Mat framechessL = cv::imread("../Images/squarefloor2/L1_squarefloor2_bgbox2.jpg");
+			cv::Mat framechessR = cv::imread("../Images/squarefloor2/R1_squarefloor2_bgbox2.jpg");
 			
 			//GET MASKS AND FEATURES WITH ORIGINAL IMAGES 
-			//WARP IMAGES, FEATURES AND MASKS
+			cv::Mat maskL, maskR;
 			
-			cv::Mat framechessL_warp;
-			cv::Mat framechessR_warp;
-			//warp images to the same plane
-			cv::warpPerspective(framechessL, framechessL_warp, Ht_L, mask_L);
-			cv::warpPerspective(framechessR, framechessR_warp, Ht_R, mask_R);
+			getMask(framechessL,imgL,maskL);
+			getMask(framechessR,imgR,maskR);
+			
+			Matches_coordinates matches_coords;
+			
+			getMatches(imgL, imgR, maskL, maskR, matches_coords); 
+			
+			Matches_coordinates matches_coords_warped;
+			cv::Point2f coordsL_warped_buff, coordsR_warped_buff;
+			
+				cv::perspectiveTransform(matches_coords.L, matches_coords_warped.L, Ht_L);
+				cv::perspectiveTransform(matches_coords.R, matches_coords_warped.R, Ht_R);
+			
+			
+			
+			//WARP IMAGES, FEATURES AND MASKS
+			cv::Mat maskL_warp;
+			cv::Mat maskR_warp;
+			
+			cv::warpPerspective(maskL, maskL_warp, Ht_L, mask_L);
+			cv::warpPerspective(maskR, maskR_warp, Ht_R, mask_R);
 			
 			//Allign features vertically
-			vertically_allign_apply(framechessL_warp, framechessR_warp, avg_v);
+			vertically_allign_apply(maskL_warp, maskR_warp, avg_v);
 			
-			cv::Mat mask, mask2;
-			
-			//Get mask
-			getMask(framechessL_warp,imgL_warp,mask);
-			getMask(framechessR_warp,imgR_warp,mask2);
-			
-			img_horz = horizontal_line_stitching_apply2(imgL_warp, imgR_warp, avg_h, mask, mask2);
+			img_horz = horizontal_line_stitching_apply2(imgL_warp, imgR_warp, avg_h, maskL_warp, maskR_warp, matches_coords_warped);
 			//img_horz = horizontal_line_stitching_apply(imgL_warp, imgR_warp, avg_h);
 		}else
 		{
