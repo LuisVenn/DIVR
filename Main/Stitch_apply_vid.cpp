@@ -136,6 +136,29 @@ void getMatches(cv::Mat img1, cv::Mat img2, cv::Mat mask1, cv::Mat mask2, Matche
     }
 }
 
+void drawSquares(cv::Mat &mask1)
+{
+   //In wich blobs are this features
+   
+	cv::Mat stat,centroid,mask3; //para que preciso da mask3??
+	int nLabels = connectedComponentsWithStats(mask1, mask3, stat,centroid,8, CV_16U);
+	
+	
+	for (int i=1;i<nLabels;i++)
+	{
+		// Top Left Corner
+		Point p1(stat.at<int>(i,CC_STAT_LEFT), stat.at<int>(i,CC_STAT_TOP));
+	  
+		// Bottom Right Corner
+		Point p2(stat.at<int>(i,CC_STAT_LEFT)+stat.at<int>(i,CC_STAT_WIDTH), stat.at<int>(i,CC_STAT_TOP)+stat.at<int>(i,CC_STAT_HEIGHT));
+	  
+		int thickness = 2;
+	  
+		// Drawing the Rectangle
+		cv::rectangle(mask1, p1, p2, Scalar(255, 0, 0), thickness, LINE_8);	
+	}	
+}
+
 void getBlobs(cv::Mat mask1, cv::Mat mask2, Matches_coordinates matches_coords, vector<blob> &blobs)
 {
    //In wich blobs are this features
@@ -172,7 +195,40 @@ void getBlobs(cv::Mat mask1, cv::Mat mask2, Matches_coordinates matches_coords, 
 	std::cout << "number of good features found in blobs: " << blobs.size() << std::endl;
 }
 
-cv::Mat horizontal_stitching_apply(cv::Mat &img1, cv::Mat &img2, int avg)
+cv::Mat getStitchingMask(cv::Mat img1, cv::Mat img2, int avg, cv::Mat &mask)
+{
+	cv::Mat output = img1.clone();
+	
+	
+	//Create buffer
+	int right;
+	right = img2.cols - avg;
+    int borderType = cv::BORDER_CONSTANT;
+    int no = 0;
+    int buff = 0;
+    cv::Scalar value(255,255,255);
+	if(img2.rows >img1.rows) buff = img2.rows-img1.rows;
+	
+	//Create Border
+	copyMakeBorder( img1, output, no, buff, no, right, borderType, value );
+	
+	//Create Mask to clean black part
+	cv::Mat img2_gray, output_gray;
+	cv::Mat mask_output = cv::Mat::zeros(output.size(), CV_8U);
+	
+	cv::cvtColor( img2, img2_gray, cv::COLOR_RGB2GRAY );
+	cv::cvtColor( output, output_gray, cv::COLOR_RGB2GRAY);
+	std::cout << buff << right << img2.size() << std::endl;
+	cv::waitKey();
+	mask.setTo(255, img2_gray > 0);
+    mask_output.setTo(255, output_gray > 0);
+    mask_output.setTo(0,output_gray == 255);
+    std::cout << buff << right << img1.size() << std::endl;
+    
+    return mask_output;
+}	
+
+cv::Mat horizontal_stitching_apply(cv::Mat &img1, cv::Mat &img2, int avg, cv::Mat mask, cv::Mat mask_output)
 {
 	cv::Mat output = img1.clone();
   
@@ -188,20 +244,7 @@ cv::Mat horizontal_stitching_apply(cv::Mat &img1, cv::Mat &img2, int avg)
 	//Create Border
 	copyMakeBorder( img1, output, no, buff, no, right, borderType, value );
 	
-	//Create Mask to clean black part
-	cv::Mat mask = cv::Mat::zeros(img2.size(), CV_8U);
-	cv::Mat mask_output = cv::Mat::zeros(output.size(), CV_8U);
-	
-	cv::Mat img2_gray, output_gray;
-	
-	cv::cvtColor( img2, img2_gray, cv::COLOR_RGB2GRAY );
-	cv::cvtColor( output, output_gray, cv::COLOR_RGB2GRAY);
-	
-	mask.setTo(255, img2_gray > 0);
-    mask_output.setTo(255, output_gray > 0);
-    mask_output.setTo(0,output_gray == 255);
-    cv::Mat outputBuff = output.clone();
-    
+	cv::Mat outputBuff = output.clone();
     outputBuff.setTo(cv::Scalar(255,255,255));
     output.copyTo(outputBuff,mask_output);
     
@@ -225,6 +268,7 @@ cv::Mat horizontal_stitching_apply(cv::Mat &img1, cv::Mat &img2, int avg)
 int frame_width = 3931;
 int frame_height = 1826;
 cv::VideoWriter output("out.avi",cv::VideoWriter::fourcc('M','J','P','G'),30,cv::Size(frame_width,frame_height));
+cv::VideoWriter output_mask("out_mask.avi",cv::VideoWriter::fourcc('M','J','P','G'),30,cv::Size(frame_width,frame_height), false);
 
 int main() 
 {
@@ -239,17 +283,17 @@ int main()
 	}
 
 	//READ IMAGES
-	cv::Mat imgL, imgR, imgR_warp, imgL_warp;
+	cv::Mat imgL, imgR, imgR_warp, imgL_warp,imgL_bg, imgR_bg, imgL_bg_warp, imgR_bg_warp;
 	
 	//frames
-	while (imgL.empty())
+	while (imgL_bg.empty())
 	{
-		capL >> imgL;
+		capL >> imgL_bg;
 	}
 	
-	while (imgR.empty())
+	while (imgR_bg.empty())
 	{
-		capR >> imgR;
+		capR >> imgR_bg;
 	}
 	
 	//READ PRE-CALIBRATED PARAMETERS
@@ -275,33 +319,44 @@ int main()
 	
 	//WARP FRAMES
 		
-	cv::warpPerspective(imgL, imgL_warp, Ht_L, warpedL_size);
-	cv::warpPerspective(imgR, imgR_warp, Ht_R, warpedR_size);
+	cv::warpPerspective(imgL_bg, imgL_bg_warp, Ht_L, warpedL_size);
+	cv::warpPerspective(imgR_bg, imgR_bg_warp, Ht_R, warpedR_size);
 
 	//Allign features vertically
-    vertically_allign_apply(imgL_warp, imgR_warp, avg_v);
+    vertically_allign_apply(imgL_bg_warp, imgR_bg_warp, avg_v);
 	
 	//LINE STITCHING
-	cv::Mat result;
+	cv::Mat background;
+	cv::Mat mask = cv::Mat::zeros(imgR_bg_warp.size(), CV_8U);
 	
-	result = horizontal_stitching_apply(imgL_warp, imgR_warp, avg_h);
+		
+	cv::Mat mask_output = getStitchingMask(imgL_bg_warp, imgR_bg_warp, avg_h, mask);
+	background = horizontal_stitching_apply(imgL_bg_warp, imgR_bg_warp, avg_h, mask, mask_output);
 	
-	std::cout << "Result size: " << result.size() << std::endl;
+	//SHOW BACKGROUND
+	
+	cv::namedWindow("Background",cv::WINDOW_NORMAL);
+	cv::resizeWindow("Background",960,536);
+	cv::imshow("Background", background);
+	cv::waitKey();
+	
+	std::cout << "Background size: " << background.size() << std::endl;
 	int count = 1;
 	
 	//Start Timer
 	int64 begin = getTickCount();
 	int64 t;
-	while(!imgL.empty())
+	
+	capL >> imgL;
+	capR >> imgR;
+	
+	while(1)
 	{
 		t = getTickCount();
 		std::cout << "Frame: " << count << std::endl;
 		count++;
-		capL >> imgL;
-		capR >> imgR;
 		
 		//WARP FRAMES
-		
 		cv::warpPerspective(imgL, imgL_warp, Ht_L, warpedL_size);
 		cv::warpPerspective(imgR, imgR_warp, Ht_R, warpedR_size);
 
@@ -310,11 +365,29 @@ int main()
 		
 		//LINE STITCHING
 		cv::Mat result;
-	
-		result = horizontal_stitching_apply(imgL_warp, imgR_warp, avg_h);
+		
+		result = horizontal_stitching_apply(imgL_warp, imgR_warp, avg_h, mask, mask_output);
+		
 		output.write(result);
+		
+		//GET MASK FROM BACKGOUND SUBTRACTION
+		cv::Mat result_mask, imgL_warp_mask, imgR_warp_mask;
+		
+		getMask(imgL_bg_warp, imgL_warp, imgL_warp_mask);
+		getMask(imgR_bg_warp, imgR_warp, imgR_warp_mask);
+		
+		drawSquares(imgL_warp_mask);
+		drawSquares(imgR_warp_mask);
+		
+		result_mask = horizontal_stitching_apply(imgL_warp_mask, imgR_warp_mask, avg_h, mask, mask_output);
+		output_mask.write(result_mask);
+		
+		capL >> imgL;
+		capR >> imgR;
+		
 		std::cout << " | " << "Elapsed Time: " << ((getTickCount() - begin) / getTickFrequency()) << " s | Video Processed: " << round(count/30) << " s | PerFrame time: " << ((getTickCount() - t) / getTickFrequency()) << " s" << std::endl;
 		
+		if(imgL.empty() || imgR.empty() || cv::waitKey(10) == 27) break;
 		
 	}
 	
@@ -322,6 +395,7 @@ int main()
 	capL.release();
 	capR.release();
 	output.release();
+	output_mask.release();
 	destroyAllWindows();
 			
 }
