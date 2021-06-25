@@ -536,35 +536,38 @@ void draw_grid(cv::Mat &mat)
 }
 
 //Get mask of new objects on image, used to feature detection and object size estimation for line stitching
-void getMask(cv::Mat frame1, cv::Mat frame2, cv::Mat &mask)
+void getMask(cv::Mat frame1, cv::Mat frame2, cv::Mat &fgMask)
 {
-	cv::cvtColor(frame1, frame1, cv::COLOR_BGR2GRAY);
-	cv::cvtColor(frame2, frame2, cv::COLOR_BGR2GRAY);
+	//cv::cvtColor(frame1, frame1, cv::COLOR_BGR2GRAY);
+	//cv::cvtColor(frame2, frame2, cv::COLOR_BGR2GRAY);
 	
 	//create Background Subtractor objects
     Ptr<BackgroundSubtractor> pBackSub;
     
-    pBackSub = createBackgroundSubtractorMOG2(500,200,true);
+    pBackSub = createBackgroundSubtractorMOG2(500,50,true);
     //pBackSub = createBackgroundSubtractorKNN();
     
     //update the background model
-    cv::Mat fgMask;
     
-    pBackSub->apply(frame1, fgMask);
-    pBackSub->apply(frame2, fgMask);
+    pBackSub->apply(frame1, fgMask, 0);
+    pBackSub->apply(frame2, fgMask, 0);
     
     //show the current frame and the fg masks
-    cv::Mat diffrence = frame1 - frame2;
+    //cv::Mat diffrence = frame1 - frame2;
  
-    mask = cv::Mat::zeros(diffrence.size(), CV_8U);
+    //mask = cv::Mat::zeros(diffrence.size(), CV_8U);
     
-    mask.setTo(255, diffrence > 25);
-
+    //mask.setTo(255, diffrence > 25);
+	
     //Morphologic operations
+    // Blur the foreground mask to reduce the effect of noise and false positives
+	cv::blur(fgMask, fgMask, cv::Size(15, 15), cv::Point(-1, -1));
+	// Remove the shadow parts and the noise
+	cv::threshold(fgMask, fgMask, 128, 255, cv::THRESH_BINARY);
     cv::Mat element = getStructuringElement(MORPH_RECT,Size(20,20),Point(9,9));
-    cv::morphologyEx(mask,mask,MORPH_OPEN,element);
-    cv::morphologyEx(mask,mask,MORPH_CLOSE,element);
-    cv::morphologyEx(mask,mask,MORPH_DILATE,element);
+    cv::morphologyEx(fgMask,fgMask,MORPH_OPEN,element);
+    cv::morphologyEx(fgMask,fgMask,MORPH_CLOSE,element);
+    cv::morphologyEx(fgMask,fgMask,MORPH_DILATE,element);
     
 }
 
@@ -593,10 +596,6 @@ int main()
 	std::vector<cv::String> imagesL, imagesR, imagesC;
 	cv::Mat imgL, imgR, imgC, imgR_warp, imgL_warp,img_matches;
 	
-	// Path of the folder containing checkerboard images
-	//std::string pathL = "./ImagesL/*.jpg"; //!!!!!!!!!!!!!!!!!!!!
-	//std::string pathR = "./ImagesR/*.jpg"; //!!!!!!!!!!!!!!!!!!!!!!!
-	//std::string pathC = "./ImagesC/*.jpg"; 
 	bool calibrationImg;
 	std::cout << "Images to use? 1-chess 0-sample " << std::endl; // Type a number and press enter
 	cin >> calibrationImg;
@@ -773,16 +772,19 @@ int main()
 			cv::Point2f coordsL_warped_buff, coordsR_warped_buff;
 		
 			//WARP IMAGES, FEATURES AND MASKS
-				//images
+			//images
 			
-				//masks
+			//masks
 			cv::Mat maskL_warp;
 			cv::Mat maskR_warp;
-			
+		
 			cv::warpPerspective(maskL, maskL_warp, Ht_L, warpedL_size);
 			cv::warpPerspective(maskR, maskR_warp, Ht_R, warpedR_size);
+			cv::imshow("Stitching result", maskL_warp);
+			cv::imshow("Features matching",maskR_warp);
+			cv::waitKey();
 			
-				//features coordinates
+			//features coordinates
 			cv::perspectiveTransform(matches_coords.L, matches_coords_warped.L, Ht_L);
 			cv::perspectiveTransform(matches_coords.R, matches_coords_warped.R, Ht_R);
 			

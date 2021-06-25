@@ -56,35 +56,38 @@ void vertically_allign_apply(cv::Mat &img1, cv::Mat &img2, int avg)
 }
 
 //Get mask of new objects on image, used to feature detection and object size estimation for line stitching
-void getMask(cv::Mat frame1, cv::Mat frame2, cv::Mat &mask)
+void getMask(cv::Mat frame1, cv::Mat frame2, cv::Mat &fgMask)
 {
-	cv::cvtColor(frame1, frame1, cv::COLOR_BGR2GRAY);
-	cv::cvtColor(frame2, frame2, cv::COLOR_BGR2GRAY);
+	//cv::cvtColor(frame1, frame1, cv::COLOR_BGR2GRAY);
+	//cv::cvtColor(frame2, frame2, cv::COLOR_BGR2GRAY);
 	
 	//create Background Subtractor objects
     Ptr<BackgroundSubtractor> pBackSub;
     
-    pBackSub = createBackgroundSubtractorMOG2(500,200,true);
+    pBackSub = createBackgroundSubtractorMOG2(500,50,true);
     //pBackSub = createBackgroundSubtractorKNN();
     
     //update the background model
-    cv::Mat fgMask;
     
-    pBackSub->apply(frame1, fgMask);
-    pBackSub->apply(frame2, fgMask);
+    pBackSub->apply(frame1, fgMask, 0);
+    pBackSub->apply(frame2, fgMask, 0);
     
     //show the current frame and the fg masks
-    cv::Mat diffrence = frame1 - frame2;
+    //cv::Mat diffrence = frame1 - frame2;
  
-    mask = cv::Mat::zeros(diffrence.size(), CV_8U);
+    //mask = cv::Mat::zeros(diffrence.size(), CV_8U);
     
-    mask.setTo(255, diffrence > 25);
-
+    //mask.setTo(255, diffrence > 25);
+	
     //Morphologic operations
-    cv::Mat element = getStructuringElement(MORPH_RECT,Size(20,20),Point(9,9));
-    cv::morphologyEx(mask,mask,MORPH_OPEN,element);
-    cv::morphologyEx(mask,mask,MORPH_CLOSE,element);
-    cv::morphologyEx(mask,mask,MORPH_DILATE,element);
+    // Blur the foreground mask to reduce the effect of noise and false positives
+	cv::blur(fgMask, fgMask, cv::Size(15, 15), cv::Point(-1, -1));
+	// Remove the shadow parts and the noise
+	cv::threshold(fgMask, fgMask, 128, 255, cv::THRESH_BINARY);
+    //cv::Mat element = getStructuringElement(MORPH_RECT,Size(20,20),Point(9,9));
+    //cv::morphologyEx(mask,mask,MORPH_OPEN,element);
+    //cv::morphologyEx(mask,mask,MORPH_CLOSE,element);
+    //cv::morphologyEx(mask,mask,MORPH_DILATE,element);
     
 }
 
@@ -317,8 +320,14 @@ int main()
     warpedR_size.height = warpedR_height;
     warpedR_size.width  = warpedR_width ;
 	
+	//GET FIFT FRAMES BECAUSE OF LIGHT CHANGES
+	for(int i=0;i<5;i++)
+	{
+	capL >> imgL_bg;
+	capR >> imgR_bg;
+	}
 	//WARP FRAMES
-		
+	
 	cv::warpPerspective(imgL_bg, imgL_bg_warp, Ht_L, warpedL_size);
 	cv::warpPerspective(imgR_bg, imgR_bg_warp, Ht_R, warpedR_size);
 
@@ -382,16 +391,18 @@ int main()
 		result_mask = horizontal_stitching_apply(imgL_warp_mask, imgR_warp_mask, avg_h, mask, mask_output);
 		output_mask.write(result_mask);
 		
+		cv::imshow("Background", result_mask);
+		
 		capL >> imgL;
 		capR >> imgR;
 		
-		std::cout << " | " << "Elapsed Time: " << ((getTickCount() - begin) / getTickFrequency()) << " s | Video Processed: " << round(count/30) << " s | PerFrame time: " << ((getTickCount() - t) / getTickFrequency()) << " s" << std::endl;
+		std::cout << " | " << "Elapsed Time: " << ((getTickCount() - begin) / (getTickFrequency()*60)) << " s | Video Processed: " << round(count/30) << " s | PerFrame time: " << ((getTickCount() - t) / getTickFrequency()) << " s" << std::endl;
 		
 		if(imgL.empty() || imgR.empty() || cv::waitKey(10) == 27) break;
 		
 	}
 	
-	std::cout << "Total elapsed time: " << ((getTickCount() - begin) / getTickFrequency()) << std::endl;
+	std::cout << "Total elapsed time: " << ((getTickCount() - begin) / (getTickFrequency()*60)) << std::endl;
 	capL.release();
 	capR.release();
 	output.release();
