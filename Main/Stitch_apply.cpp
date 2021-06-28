@@ -388,9 +388,10 @@ cv::Mat horizontal_blob_stitching_apply(cv::Mat &img1, cv::Mat &img2, cv::Mat bk
 
 	for(int i = 0; i<blobs.size();i++)
 	{
-		std::cout << "bkg size: " << bkg2.size() << "mask size: " << mask.size() << std::endl;
 		bkg2(cv::Rect(blobs[i].leftR, blobs[i].top, blobs[i].widthR, blobs[i].height)).copyTo(img2_patched(cv::Rect(blobs[i].leftR, blobs[i].top, blobs[i].widthR, blobs[i].height)),mask(cv::Rect(blobs[i].leftR, blobs[i].top, blobs[i].widthR, blobs[i].height)));
 	}	
+	
+	//Adicionar colagem da esquerda
 	
 	img2_patched(cv::Rect(0,0,img2_patched.cols,img2_patched.rows)).copyTo(outputBuff(cv::Rect(img1.cols-avg,0,img2_patched.cols,img2_patched.rows)),mask(cv::Rect(0,0,img2_patched.cols,img2_patched.rows)));
 	

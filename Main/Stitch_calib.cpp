@@ -178,7 +178,7 @@ int main()
 	std::cout << "-- Saving new parameters --" << std::endl;
 	std::ostringstream name;
     string val;
-    std::cout << "New parameters file name?" << std::endl;
+    std::cout << "New parameters file name? ./Homography_params_....xml" << std::endl;
     std::cin >> val;
     name << "./Homography_params_" << val << ".xml";
     
