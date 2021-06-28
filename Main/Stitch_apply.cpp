@@ -23,6 +23,8 @@ cv::Size patternSize(6,9);
 struct blob {
   int top;
   int bot;
+  int dtotal;
+  int nfeatures;
   int d;
 };
 
@@ -56,35 +58,38 @@ void vertically_allign_apply(cv::Mat &img1, cv::Mat &img2, int avg)
 }
 
 //Get mask of new objects on image, used to feature detection and object size estimation for line stitching
-void getMask(cv::Mat frame1, cv::Mat frame2, cv::Mat &mask)
+void getMask(cv::Mat frame1, cv::Mat frame2, cv::Mat &fgMask)
 {
-	cv::cvtColor(frame1, frame1, cv::COLOR_BGR2GRAY);
-	cv::cvtColor(frame2, frame2, cv::COLOR_BGR2GRAY);
+	//cv::cvtColor(frame1, frame1, cv::COLOR_BGR2GRAY);
+	//cv::cvtColor(frame2, frame2, cv::COLOR_BGR2GRAY);
 	
 	//create Background Subtractor objects
     Ptr<BackgroundSubtractor> pBackSub;
     
-    pBackSub = createBackgroundSubtractorMOG2(500,200,true);
+    pBackSub = createBackgroundSubtractorMOG2(500,50,true);
     //pBackSub = createBackgroundSubtractorKNN();
     
     //update the background model
-    cv::Mat fgMask;
     
-    pBackSub->apply(frame1, fgMask);
-    pBackSub->apply(frame2, fgMask);
+    pBackSub->apply(frame1, fgMask, 0);
+    pBackSub->apply(frame2, fgMask, 0);
     
     //show the current frame and the fg masks
-    cv::Mat diffrence = frame1 - frame2;
+    //cv::Mat diffrence = frame1 - frame2;
  
-    mask = cv::Mat::zeros(diffrence.size(), CV_8U);
+    //mask = cv::Mat::zeros(diffrence.size(), CV_8U);
     
-    mask.setTo(255, diffrence > 25);
-
+    //mask.setTo(255, diffrence > 25);
+	
     //Morphologic operations
+    // Blur the foreground mask to reduce the effect of noise and false positives
+	cv::blur(fgMask, fgMask, cv::Size(15, 15), cv::Point(-1, -1));
+	// Remove the shadow parts and the noise
+	cv::threshold(fgMask, fgMask, 128, 255, cv::THRESH_BINARY);
     cv::Mat element = getStructuringElement(MORPH_RECT,Size(20,20),Point(9,9));
-    cv::morphologyEx(mask,mask,MORPH_OPEN,element);
-    cv::morphologyEx(mask,mask,MORPH_CLOSE,element);
-    cv::morphologyEx(mask,mask,MORPH_DILATE,element);
+    cv::morphologyEx(fgMask,fgMask,MORPH_OPEN,element);
+    cv::morphologyEx(fgMask,fgMask,MORPH_CLOSE,element);
+    cv::morphologyEx(fgMask,fgMask,MORPH_DILATE,element);
     
 }
 
@@ -136,40 +141,56 @@ void getMatches(cv::Mat img1, cv::Mat img2, cv::Mat mask1, cv::Mat mask2, Matche
     }
 }
 
-void getBlobs(cv::Mat mask1, cv::Mat mask2, Matches_coordinates matches_coords, vector<blob> &blobs)
+vector<blob> getBlobs(cv::Mat mask1, cv::Mat mask2, Matches_coordinates matches_coords)
 {
    //In wich blobs are this features
-   
+	
 	cv::Mat stat,centroid,mask3; //para que preciso da mask3??
 	int nLabels = connectedComponentsWithStats(mask1, mask3, stat,centroid,8, CV_16U);
 	int w = mask1.cols;
 	blob blob_buff;
-	vector<bool> block(nLabels,1);
+	vector<blob> blobs(nLabels);
 	
 	for (size_t imatch = 0; imatch < matches_coords.L.size(); imatch++)
     {
 		cv::Point pt1 = matches_coords.L[imatch];
 		cv::Point pt2 = matches_coords.R[imatch];
 
-		for (int i=1;i<nLabels;i++)
+		for (int i=1;i<nLabels;i++) //the first one is the background?
 		{
-			if(block[i] && (pt1.x >= stat.at<int>(i,CC_STAT_LEFT)) && (pt1.x <= (stat.at<int>(i,CC_STAT_LEFT) + stat.at<int>(i,CC_STAT_WIDTH)) && (pt1.y >= stat.at<int>(i,CC_STAT_TOP)) && (pt1.y <= (stat.at<int>(i,CC_STAT_TOP) + stat.at<int>(i,CC_STAT_HEIGHT)))))
+			if((pt1.x >= stat.at<int>(i,CC_STAT_LEFT)) && (pt1.x <= (stat.at<int>(i,CC_STAT_LEFT) + stat.at<int>(i,CC_STAT_WIDTH)) && (pt1.y >= stat.at<int>(i,CC_STAT_TOP)) && (pt1.y <= (stat.at<int>(i,CC_STAT_TOP) + stat.at<int>(i,CC_STAT_HEIGHT)))))
 			{
-				blob_buff.top = stat.at<int>(i,CC_STAT_TOP);
-				blob_buff.bot = stat.at<int>(i,CC_STAT_TOP) + stat.at<int>(i,CC_STAT_HEIGHT);
-				blob_buff.d = ((w - pt1.x) + pt2.x);
-				blobs.push_back(blob_buff);
-				std::cout << i << " blob top: " << blob_buff.top << std::endl;
-				std::cout << i << " blob bot: " << blob_buff.bot << std::endl;
-				std::cout << i << " d: " << blob_buff.d << std::endl;
-				block[i] = 0;
-				
-				break;
+				if(!blobs[i].top)
+				{
+					blobs[i].top = stat.at<int>(i,CC_STAT_TOP);
+					blobs[i].bot = stat.at<int>(i,CC_STAT_TOP) + stat.at<int>(i,CC_STAT_HEIGHT);
+				}
+				blobs[i].dtotal += ((w - pt1.x) + pt2.x);
+				blobs[i].nfeatures += 1;
 			}	 
 		}	
 	}
+	
+	//Get average distance and remove blobs with no features
+	for (int i=0;i<nLabels;i++) //the first one is the background?
+	{
+		std::cout << "Blob nº "<< i << " Top: " << blobs[i].top << " Bot: " << blobs[i].bot  << " dtotal: " << blobs[i].dtotal << " nfeatures: " << blobs[i].nfeatures << " d: " << blobs[i].d << std::endl;
+		if(blobs[i].nfeatures>0) 
+		{
+			blobs[i].d = blobs[i].dtotal/blobs[i].nfeatures;
+		}else{
+			blobs.erase(blobs.begin()+i);
+			i--;
+		}
+	}
+	std::cout << "No features blobs removed" << std::endl;
+	for (int i=0;i<blobs.size();i++) 
+	{
+		std::cout << "Blob nº "<< i << " Top: " << blobs[i].top << " Bot: " << blobs[i].bot  << " dtotal: " << blobs[i].dtotal << " nfeatures: " << blobs[i].nfeatures << " d: " << blobs[i].d << std::endl;
+	}
 	sort(blobs.begin(),blobs.end(),organizablob);
-	std::cout << "number of good features found in blobs: " << blobs.size() << std::endl;
+	std::cout << "number of blobs with features: " << blobs.size() << std::endl;
+	return blobs;
 }
 
 cv::Mat horizontal_line_stitching_apply(cv::Mat &img1, cv::Mat &img2, int avg, cv::Mat mask1, cv::Mat mask2, Matches_coordinates matches_coords, vector<blob> blobs)
@@ -320,8 +341,8 @@ int main()
 	getMatches(imgL_warp, imgR_warp, maskL_warp, maskR_warp, matches_coords);
 	
 	//DIVIDE BLOBS
-	vector<blob> blobs;
-	getBlobs(maskL_warp, maskR_warp, matches_coords, blobs);
+	
+	vector<blob> blobs = getBlobs(maskL_warp, maskR_warp, matches_coords);
 	
 	//LINE STITCHING
 	cv::Mat result;
