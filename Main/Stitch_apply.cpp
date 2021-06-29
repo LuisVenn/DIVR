@@ -344,61 +344,47 @@ vector<blob> getBlobs(cv::Mat mask1, cv::Mat mask2, int avg, Matches_coordinates
 	//return outputBuff;
 //}	
 
-cv::Mat horizontal_blob_stitching_apply(cv::Mat &img1, cv::Mat &img2, cv::Mat bkg1, cv::Mat bkg2, int avg, cv::Mat mask1, cv::Mat mask2, Matches_coordinates matches_coords, vector<blob> blobs)
+cv::Mat horizontal_blob_stitching_apply(cv::Mat &img1, cv::Mat &img2, cv::Mat bkg1, cv::Mat bkg2, int avg, vector<blob> blobs)
 {
-	cv::Mat output = img1.clone();
+	//Create Mask to clean black part
+	cv::Mat mask1 = cv::Mat::zeros(img1.size(), CV_8U);
+	cv::Mat mask2 = cv::Mat::zeros(img2.size(), CV_8U);
+	
+	cv::Mat img1_gray, img2_gray, output_gray;
+	
+	cv::cvtColor( img1, img1_gray, cv::COLOR_RGB2GRAY );
+	cv::cvtColor( img2, img2_gray, cv::COLOR_RGB2GRAY );
+	
+	mask1.setTo(255, img1_gray > 0);
+	mask2.setTo(255, img2_gray > 0);
+    
+    int buff=0;
+    if(img2.rows > img1.rows) buff = img2.rows-img1.rows;
+    cv::Mat outputBuff(img1.rows+buff,img1.cols+img2.cols-avg,CV_8UC3);
+    
+    outputBuff.setTo(cv::Scalar(255,255,255));
+    
+	//use the bckg to hide moved blobs
+	cv::Mat img2_patched = img2.clone();
+	cv::Mat img1_patched = img1.clone();	
+	
+	//Make patches with the background on the area of the blob
+	for(int i = 0; i<blobs.size();i++)
+	{
+		bkg1(cv::Rect(blobs[i].leftL, blobs[i].top, blobs[i].widthL, blobs[i].height)).copyTo(img1_patched(cv::Rect(blobs[i].leftL, blobs[i].top, blobs[i].widthL, blobs[i].height)),mask1(cv::Rect(blobs[i].leftL, blobs[i].top, blobs[i].widthL, blobs[i].height)));
+		bkg2(cv::Rect(blobs[i].leftR, blobs[i].top, blobs[i].widthR, blobs[i].height)).copyTo(img2_patched(cv::Rect(blobs[i].leftR, blobs[i].top, blobs[i].widthR, blobs[i].height)),mask2(cv::Rect(blobs[i].leftR, blobs[i].top, blobs[i].widthR, blobs[i].height)));
+	}
 	
 	drawSquares(img1,blobs);
 	
-	//Create buffer
-	int right = img2.cols - avg;
-    int borderType = cv::BORDER_CONSTANT;
-    int no = 0;
-    int buff = 0;
-    cv::Scalar value(255,255,255);
-	if(img2.rows >img1.rows) buff = img2.rows-img1.rows;
+	//Stitch the patched images to create the panorama
+	img1_patched(cv::Rect(0,0,img1_patched.cols,img1_patched.rows)).copyTo(outputBuff(cv::Rect(0,0,img1_patched.cols,img1_patched.rows)),mask1(cv::Rect(0,0,img1_patched.cols,img1_patched.rows)));
+	img2_patched(cv::Rect(0,0,img2_patched.cols,img2_patched.rows)).copyTo(outputBuff(cv::Rect(img1.cols-avg,0,img2_patched.cols,img2_patched.rows)),mask2(cv::Rect(0,0,img2_patched.cols,img2_patched.rows)));
 	
-	//Create Border
-	copyMakeBorder( img1, output, no, buff, no, right, borderType, value );
-	
-	//Create Mask to clean black part
-	cv::Mat mask = cv::Mat::zeros(img2.size(), CV_8U);
-	cv::Mat mask_output = cv::Mat::zeros(output.size(), CV_8U);
-	
-	cv::Mat img2_gray, output_gray;
-	
-	cv::cvtColor( img2, img2_gray, cv::COLOR_RGB2GRAY );
-	cv::cvtColor( output, output_gray, cv::COLOR_RGB2GRAY);
-	
-	mask.setTo(255, img2_gray > 0);
-    mask_output.setTo(255, output_gray > 0);
-    mask_output.setTo(0,output_gray == 255);
-    cv::Mat outputBuff = output.clone();
-    
-    outputBuff.setTo(cv::Scalar(255,255,255));
-    output.copyTo(outputBuff,mask_output);
-    
-	int gap = 1;
-	int line = round((img2.rows/gap));
-	int remainder = round((img2.rows % gap)); 	
-
-	int top = 0,bot,d;
-	cv::Mat img2_patched = img2.clone();
-	//use the bckg to hide moved blobs
-
+	//Stamp the blob on the "virtual camera" position"
 	for(int i = 0; i<blobs.size();i++)
 	{
-		bkg2(cv::Rect(blobs[i].leftR, blobs[i].top, blobs[i].widthR, blobs[i].height)).copyTo(img2_patched(cv::Rect(blobs[i].leftR, blobs[i].top, blobs[i].widthR, blobs[i].height)),mask(cv::Rect(blobs[i].leftR, blobs[i].top, blobs[i].widthR, blobs[i].height)));
-	}	
-	
-	//Adicionar colagem da esquerda
-	
-	img2_patched(cv::Rect(0,0,img2_patched.cols,img2_patched.rows)).copyTo(outputBuff(cv::Rect(img1.cols-avg,0,img2_patched.cols,img2_patched.rows)),mask(cv::Rect(0,0,img2_patched.cols,img2_patched.rows)));
-	
-	for(int i = 0; i<blobs.size();i++)
-	{
-		
-		img2(cv::Rect(blobs[i].leftR, blobs[i].top, blobs[i].widthR, blobs[i].height)).copyTo(outputBuff(cv::Rect(img1.cols-avg+blobs[i].leftR+blobs[i].d,blobs[i].top, blobs[i].widthR,blobs[i].height)),mask(cv::Rect(blobs[i].leftR, blobs[i].top, blobs[i].widthR, blobs[i].height)));
+		//img2(cv::Rect(blobs[i].leftR, blobs[i].top, blobs[i].widthR, blobs[i].height)).copyTo(outputBuff(cv::Rect(img1.cols-avg+blobs[i].leftR+blobs[i].d,blobs[i].top, blobs[i].widthR,blobs[i].height)),mask2(cv::Rect(blobs[i].leftR, blobs[i].top, blobs[i].widthR, blobs[i].height)));
 	}	
 	
 	return outputBuff;
@@ -468,7 +454,7 @@ int main()
 	cv::Mat result;
 	
 	//result = horizontal_line_stitching_apply(imgL_warp, imgR_warp, avg_h, maskL_warp, maskR_warp, matches_coords, blobs);
-	result = horizontal_blob_stitching_apply(imgL_warp, imgR_warp, imgL_bg_warp, imgR_bg_warp, avg_h, maskL_warp, maskR_warp, matches_coords, blobs);
+	result = horizontal_blob_stitching_apply(imgL_warp, imgR_warp, imgL_bg_warp, imgR_bg_warp, avg_h, blobs);
 	//SHOW RESULT
 	cv::namedWindow("Result",cv::WINDOW_NORMAL);
 	cv::resizeWindow("Result",960,536);
