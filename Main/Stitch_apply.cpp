@@ -375,18 +375,44 @@ cv::Mat horizontal_blob_stitching_apply(cv::Mat &img1, cv::Mat &img2, cv::Mat bk
 		bkg2(cv::Rect(blobs[i].leftR, blobs[i].top, blobs[i].widthR, blobs[i].height)).copyTo(img2_patched(cv::Rect(blobs[i].leftR, blobs[i].top, blobs[i].widthR, blobs[i].height)),mask2(cv::Rect(blobs[i].leftR, blobs[i].top, blobs[i].widthR, blobs[i].height)));
 	}
 	
-	drawSquares(img1,blobs);
+	//drawSquares(img1,blobs);
 	
 	//Stitch the patched images to create the panorama
 	img1_patched(cv::Rect(0,0,img1_patched.cols,img1_patched.rows)).copyTo(outputBuff(cv::Rect(0,0,img1_patched.cols,img1_patched.rows)),mask1(cv::Rect(0,0,img1_patched.cols,img1_patched.rows)));
 	img2_patched(cv::Rect(0,0,img2_patched.cols,img2_patched.rows)).copyTo(outputBuff(cv::Rect(img1.cols-avg,0,img2_patched.cols,img2_patched.rows)),mask2(cv::Rect(0,0,img2_patched.cols,img2_patched.rows)));
 	
 	//Stamp the blob on the "virtual camera" position"
+	
+	cv::Mat outputBuff2 ;
+	outputBuff2 = Mat::zeros(outputBuff.rows, outputBuff.cols, CV_8UC3);
+	cv::Mat outputBuff1 = outputBuff2.clone();
+	int width;
+	cv::namedWindow("Result",cv::WINDOW_NORMAL);
+	cv::resizeWindow("Result",960,536);
+	cv::Mat img1buff,img2buff;
 	for(int i = 0; i<blobs.size();i++)
 	{
-		//img2(cv::Rect(blobs[i].leftR, blobs[i].top, blobs[i].widthR, blobs[i].height)).copyTo(outputBuff(cv::Rect(img1.cols-avg+blobs[i].leftR+blobs[i].d,blobs[i].top, blobs[i].widthR,blobs[i].height)),mask2(cv::Rect(blobs[i].leftR, blobs[i].top, blobs[i].widthR, blobs[i].height)));
+		width = blobs[i].widthL;
+		if(blobs[i].widthR > width) width = blobs[i].widthR;
+		
+		int midPoint = img1.cols-avg+blobs[i].leftR+blobs[i].d + width/2;
+		double ratio = (midPoint-(img1.cols-avg))/(double)avg;
+		
+		//std::cout << "avg: " << avg << " ratio: " <<  ratio << " midpoint: "<< midPoint << " (midPoint-(img1.cols-avg)): " << (midPoint-(img1.cols-avg))<< " (midPoint-(img1.cols-avg))/avg: " << (midPoint-(img1.cols-avg))/avg << std::endl;
+		img1buff = img1 * (1-ratio);
+		img2buff = img2 * ratio;
+		
+		img1buff(cv::Rect(blobs[i].leftL, blobs[i].top, width, blobs[i].height)).copyTo(outputBuff1(cv::Rect(img1.cols-avg+blobs[i].leftR+blobs[i].d,blobs[i].top, width,blobs[i].height)),mask1(cv::Rect(blobs[i].leftL, blobs[i].top, width, blobs[i].height)));
+		img2buff(cv::Rect(blobs[i].leftR, blobs[i].top, width, blobs[i].height)).copyTo(outputBuff2(cv::Rect(img1.cols-avg+blobs[i].leftR+blobs[i].d,blobs[i].top, width,blobs[i].height)),mask2(cv::Rect(blobs[i].leftR, blobs[i].top, width, blobs[i].height)));
+		outputBuff(cv::Rect(img1.cols-avg+blobs[i].leftR+blobs[i].d,blobs[i].top, width,blobs[i].height)) = 0;
+		outputBuff += outputBuff2 + outputBuff1;
+		
+		outputBuff1 = 0;
+		outputBuff2 = 0;
+		img1buff = 0;
+		img2buff = 0;
 	}	
-	
+		
 	return outputBuff;
 }	
 
