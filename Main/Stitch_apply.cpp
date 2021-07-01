@@ -467,12 +467,12 @@ int main()
 	getMask(imgL_bg_warp, imgL_warp, maskL_warp);
 	getMask(imgR_bg_warp, imgR_warp, maskR_warp);
 	
-	//DETECT FEATURES
+	//DETECT FEATURES AND GET MATCHES
 	Matches_coordinates matches_coords;
 			
 	getMatches(imgL_warp, imgR_warp, maskL_warp, maskR_warp, matches_coords);
 	
-	//DIVIDE BLOBS
+	//DIVIDE BLOBS PAIRS
 	
 	vector<blob> blobs = getBlobs(maskL_warp, maskR_warp, avg_h, matches_coords);
 	

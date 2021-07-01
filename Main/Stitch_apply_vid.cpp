@@ -22,7 +22,13 @@ cv::Size patternSize(6,9);
 
 struct blob {
   int top;
-  int bot;
+  int height;
+  int leftL;
+  int widthL;
+  int leftR;
+  int widthR;
+  int dtotal;
+  int nfeatures;
   int d;
 };
 
@@ -84,10 +90,10 @@ void getMask(cv::Mat frame1, cv::Mat frame2, cv::Mat &fgMask)
 	cv::blur(fgMask, fgMask, cv::Size(15, 15), cv::Point(-1, -1));
 	// Remove the shadow parts and the noise
 	cv::threshold(fgMask, fgMask, 128, 255, cv::THRESH_BINARY);
-    //cv::Mat element = getStructuringElement(MORPH_RECT,Size(20,20),Point(9,9));
-    //cv::morphologyEx(mask,mask,MORPH_OPEN,element);
-    //cv::morphologyEx(mask,mask,MORPH_CLOSE,element);
-    //cv::morphologyEx(mask,mask,MORPH_DILATE,element);
+    cv::Mat element = getStructuringElement(MORPH_RECT,Size(20,20),Point(9,9));
+    cv::morphologyEx(fgMask,fgMask,MORPH_OPEN,element);
+    cv::morphologyEx(fgMask,fgMask,MORPH_CLOSE,element);
+    cv::morphologyEx(fgMask,fgMask,MORPH_DILATE,element);
     
 }
 
@@ -101,6 +107,12 @@ void getMatches(cv::Mat img1, cv::Mat img2, cv::Mat mask1, cv::Mat mask2, Matche
 	detector->detectAndCompute( img1, mask1, keypoints1, descriptors1 );
 	detector->detectAndCompute( img2, mask2, keypoints2, descriptors2 );
 	
+	if(keypoints1.size()*keypoints2.size() == 0 ) 
+	{
+		std::cout << "erro nos descriptors: kp1 =" << keypoints1.size() <<" kp2 = " << keypoints2.size() << std::endl;
+		return;
+	}
+		
 	//Matching Features
 	BFMatcher matcher(NORM_HAMMING);
 	
@@ -111,7 +123,7 @@ void getMatches(cv::Mat img1, cv::Mat img2, cv::Mat mask1, cv::Mat mask2, Matche
 	std::vector<DMatch> match1;
 	std::vector<DMatch> match2;
 
-    std::vector<DMatch> sorted_matches;
+    std::vector<DMatch> sorted_matches,good_matches;
     
     //get the best match
     for (size_t i = 0; i < matches.size(); i++)
@@ -121,22 +133,30 @@ void getMatches(cv::Mat img1, cv::Mat img2, cv::Mat mask1, cv::Mat mask2, Matche
 	
 	sort(sorted_matches.begin(),sorted_matches.end(),organiza);
 	
-   	std::cout << "--------------------" << std::endl;
-   	std::cout << "----Good matches----" << std::endl;
-   	std::cout << "--------------------" << std::endl;
+   	//std::cout << "--------------------" << std::endl;
+   	//std::cout << "----Good matches----" << std::endl;
+   	//std::cout << "--------------------" << std::endl;
    	
    	for (size_t i = 0; i < sorted_matches.size(); i++)
     {
 		if (sorted_matches[i].distance < 45)
 		{
+			good_matches.push_back(sorted_matches[i]);
 			matches_coords.L.push_back(keypoints1[sorted_matches[i].queryIdx].pt);
 			matches_coords.R.push_back(keypoints2[sorted_matches[i].trainIdx].pt);
-			std::cout << "Keypoint 1: " << keypoints1[sorted_matches[i].queryIdx].pt << std::endl;
-			std::cout << "Keypoint 2: " << keypoints2[sorted_matches[i].trainIdx].pt << std::endl;
-			std::cout << "Distance: " << sorted_matches[i].distance << std::endl;
-			std::cout << "--------------------" << std::endl;
+			//std::cout << "Keypoint 1: " << keypoints1[sorted_matches[i].queryIdx].pt << std::endl;
+			//std::cout << "Keypoint 2: " << keypoints2[sorted_matches[i].trainIdx].pt << std::endl;
+			//std::cout << "Distance: " << sorted_matches[i].distance << std::endl;
+			//std::cout << "--------------------" << std::endl;
 		}
     }
+    
+    //cv::Mat imgmatches;
+    //cv::drawMatches(mask1, keypoints1, mask2, keypoints2, good_matches, imgmatches);
+    //cv::namedWindow("matches",cv::WINDOW_NORMAL);
+	//cv::resizeWindow("matches",960,536);
+    //cv::imshow("matches",imgmatches);
+	//cv::waitKey();
 }
 
 void drawSquares(cv::Mat &mask1)
@@ -162,40 +182,87 @@ void drawSquares(cv::Mat &mask1)
 	}	
 }
 
-void getBlobs(cv::Mat mask1, cv::Mat mask2, Matches_coordinates matches_coords, vector<blob> &blobs)
+vector<blob> getBlobs(cv::Mat mask1, cv::Mat mask2, int avg, Matches_coordinates matches_coords)
 {
    //In wich blobs are this features
-   
-	cv::Mat stat,centroid,mask3; //para que preciso da mask3??
-	int nLabels = connectedComponentsWithStats(mask1, mask3, stat,centroid,8, CV_16U);
+	
+	cv::Mat statL,statR,centroid,mask3; //para que preciso da mask3??
+	int nLabelsL = connectedComponentsWithStats(mask1, mask3, statL,centroid,8, CV_16U);
+	int nLabelsR = connectedComponentsWithStats(mask2, mask3, statR,centroid,8, CV_16U);
 	int w = mask1.cols;
 	blob blob_buff;
-	vector<bool> block(nLabels,1);
+	int maxLabels = nLabelsL;
+	if(nLabelsR>nLabelsL) maxLabels = nLabelsR;
 	
+	vector<blob> blobs(maxLabels);
+	if(nLabelsL <= 1 || nLabelsR <= 1) 
+	{	
+	std::cout << "não há blobs em nLabelsL: " << nLabelsL << "ou nLabelsR: " << nLabelsR << std::endl; 
+	vector<blob> blobsNull(0);
+	return blobsNull;
+	}
+	
+	for(int i=0;i<2;i++)
+	{
+		std::cout << "blob " << i << " : Left: " << statR.at<int>(i,CC_STAT_LEFT) << "Width: " << statR.at<int>(i,CC_STAT_WIDTH) << std::endl;  
+	} 
 	for (size_t imatch = 0; imatch < matches_coords.L.size(); imatch++)
     {
 		cv::Point pt1 = matches_coords.L[imatch];
 		cv::Point pt2 = matches_coords.R[imatch];
 
-		for (int i=1;i<nLabels;i++)
+		for (int i=1;i<nLabelsL;i++) //the first one is the background
 		{
-			if(block[i] && (pt1.x >= stat.at<int>(i,CC_STAT_LEFT)) && (pt1.x <= (stat.at<int>(i,CC_STAT_LEFT) + stat.at<int>(i,CC_STAT_WIDTH)) && (pt1.y >= stat.at<int>(i,CC_STAT_TOP)) && (pt1.y <= (stat.at<int>(i,CC_STAT_TOP) + stat.at<int>(i,CC_STAT_HEIGHT)))))
+			if((pt1.x >= statL.at<int>(i,CC_STAT_LEFT)) && (pt1.x <= (statL.at<int>(i,CC_STAT_LEFT) + statL.at<int>(i,CC_STAT_WIDTH)) && (pt1.y >= statL.at<int>(i,CC_STAT_TOP)) && (pt1.y <= (statL.at<int>(i,CC_STAT_TOP) + statL.at<int>(i,CC_STAT_HEIGHT)))))
 			{
-				blob_buff.top = stat.at<int>(i,CC_STAT_TOP);
-				blob_buff.bot = stat.at<int>(i,CC_STAT_TOP) + stat.at<int>(i,CC_STAT_HEIGHT);
-				blob_buff.d = ((w - pt1.x) + pt2.x);
-				blobs.push_back(blob_buff);
-				std::cout << i << " blob top: " << blob_buff.top << std::endl;
-				std::cout << i << " blob bot: " << blob_buff.bot << std::endl;
-				std::cout << i << " d: " << blob_buff.d << std::endl;
-				block[i] = 0;
-				
-				break;
-			}	 
-		}	
+				//std::cout << "pertence a esquerda: "<< i << std::endl;
+			
+				for(int i2=1; i2<nLabelsR; i2++)
+				{
+					if((pt2.x >= statR.at<int>(i2,CC_STAT_LEFT)) && (pt2.x <= (statR.at<int>(i2,CC_STAT_LEFT) + statR.at<int>(i2,CC_STAT_WIDTH)) && (pt2.y >= statR.at<int>(i2,CC_STAT_TOP)) && (pt2.y <= (statR.at<int>(i2,CC_STAT_TOP) + statR.at<int>(i2,CC_STAT_HEIGHT)))))
+					{
+						//std::cout << "pertence a direita: " << i2 << std::endl;	
+						if(!blobs[i].top)
+						{
+							//std::cout << "criou" << std::endl;
+							blobs[i].top = statL.at<int>(i,CC_STAT_TOP);
+							blobs[i].height = statL.at<int>(i,CC_STAT_HEIGHT);
+							blobs[i].leftL = statL.at<int>(i,CC_STAT_LEFT);
+							blobs[i].widthL = statL.at<int>(i,CC_STAT_WIDTH);
+							blobs[i].leftR = statR.at<int>(i2,CC_STAT_LEFT);
+							blobs[i].widthR = statR.at<int>(i2,CC_STAT_WIDTH);
+					
+						}
+						blobs[i].dtotal += ((w - pt1.x) + pt2.x);
+						blobs[i].nfeatures += 1;
+						break;
+					}
+				}
+			}
+		}
+	}
+	//Get average distance and remove blobs with no features
+	for (int i=0;i<blobs.size();i++) //the first one is the background?
+	{
+		//std::cout << "Blob nº "<< i << " Top: " << blobs[i].top << " Height: " << blobs[i].height  << " dtotal: " << blobs[i].dtotal << " nfeatures: " << blobs[i].nfeatures << " d: " << blobs[i].d << std::endl;
+		if(blobs[i].nfeatures>0) 
+		{
+			blobs[i].d = (avg-(blobs[i].dtotal/blobs[i].nfeatures))/2;
+		}else{
+			blobs.erase(blobs.begin()+i);
+			i--;
+		}
+	}
+	//std::cout << "No features blobs removed" << std::endl;
+	for (int i=0;i<blobs.size();i++) 
+	{
+		std::cout << "Blob nº "<< i << " Top: " << blobs[i].top << " Height: " << blobs[i].height  << " dtotal: " << blobs[i].dtotal << " nfeatures: " << blobs[i].nfeatures << " d: " << blobs[i].d << std::endl;
+		std::cout << " LeftL: " << blobs[i].leftL <<" WidthL: " << blobs[i].widthL << " LeftR: " << blobs[i].leftR <<" WidthR: " << blobs[i].widthR << std::endl;
+		std::cout << avg<< std::endl;
 	}
 	sort(blobs.begin(),blobs.end(),organizablob);
-	std::cout << "number of good features found in blobs: " << blobs.size() << std::endl;
+	std::cout << "number of blobs with features: " << blobs.size() << std::endl;
+	return blobs;
 }
 
 cv::Mat getStitchingMask(cv::Mat img1, cv::Mat img2, int avg, cv::Mat &mask)
@@ -268,6 +335,86 @@ cv::Mat horizontal_stitching_apply(cv::Mat &img1, cv::Mat &img2, int avg, cv::Ma
 	return outputBuff;
 }	
 
+cv::Mat horizontal_blob_stitching_apply(cv::Mat &img1, cv::Mat &img2, cv::Mat bkg1, cv::Mat bkg2, int avg, vector<blob> blobs)
+{
+	//Create Mask to clean black part
+	cv::Mat mask1 = cv::Mat::zeros(img1.size(), CV_8U);
+	cv::Mat mask2 = cv::Mat::zeros(img2.size(), CV_8U);
+	
+	cv::Mat img1_gray, img2_gray, output_gray;
+	
+	cv::cvtColor( img1, img1_gray, cv::COLOR_RGB2GRAY );
+	cv::cvtColor( img2, img2_gray, cv::COLOR_RGB2GRAY );
+	
+	mask1.setTo(255, img1_gray > 0);
+	mask2.setTo(255, img2_gray > 0);
+    
+    int buff=0;
+    if(img2.rows > img1.rows) buff = img2.rows-img1.rows;
+    cv::Mat outputBuff(img1.rows+buff,img1.cols+img2.cols-avg,CV_8UC3);
+    
+    outputBuff.setTo(cv::Scalar(255,255,255));
+    
+	//use the bckg to hide moved blobs
+	cv::Mat img2_patched = img2.clone();
+	cv::Mat img1_patched = img1.clone();	
+	
+	//Make patches with the background on the area of the blob
+	for(int i = 0; i<blobs.size();i++)
+	{
+		bkg1(cv::Rect(blobs[i].leftL, blobs[i].top, blobs[i].widthL, blobs[i].height)).copyTo(img1_patched(cv::Rect(blobs[i].leftL, blobs[i].top, blobs[i].widthL, blobs[i].height)),mask1(cv::Rect(blobs[i].leftL, blobs[i].top, blobs[i].widthL, blobs[i].height)));
+		bkg2(cv::Rect(blobs[i].leftR, blobs[i].top, blobs[i].widthR, blobs[i].height)).copyTo(img2_patched(cv::Rect(blobs[i].leftR, blobs[i].top, blobs[i].widthR, blobs[i].height)),mask2(cv::Rect(blobs[i].leftR, blobs[i].top, blobs[i].widthR, blobs[i].height)));
+	}
+	
+	//drawSquares(img1,blobs);
+	
+	//Stitch the patched images to create the panorama
+	img1_patched(cv::Rect(0,0,img1_patched.cols,img1_patched.rows)).copyTo(outputBuff(cv::Rect(0,0,img1_patched.cols,img1_patched.rows)),mask1(cv::Rect(0,0,img1_patched.cols,img1_patched.rows)));
+	img2_patched(cv::Rect(0,0,img2_patched.cols,img2_patched.rows)).copyTo(outputBuff(cv::Rect(img1.cols-avg,0,img2_patched.cols,img2_patched.rows)),mask2(cv::Rect(0,0,img2_patched.cols,img2_patched.rows)));
+	
+	//Stamp the blob on the "virtual camera" position"
+	
+	cv::Mat outputBuff2 ;
+	outputBuff2 = Mat::zeros(outputBuff.rows, outputBuff.cols, CV_8UC3);
+	cv::Mat outputBuff1 = outputBuff2.clone();
+	int widthL, widthR, maxWidth;
+	cv::Mat img1buff,img2buff;
+	for(int i = 0; i<blobs.size();i++)
+	{
+		widthL = blobs[i].widthL;
+		widthR = blobs[i].widthR;
+		maxWidth = widthR;
+		if(widthL > widthR)
+		{
+			 maxWidth = widthL;
+			 widthR = widthL;
+		}else widthL = widthR;
+		
+		if(widthL > img1.cols - blobs[i].leftL) widthL = blobs[i].widthL; 
+		//if(widthR > blobs[i].leftL  blobs[i].leftL) widthL = blobs[i].widthL; nao acontece pq ele tira sempre da esq para a direita
+		//widthR = blobs[i].widthR;
+		
+		int midPoint = img1.cols-avg+blobs[i].leftR+blobs[i].d + maxWidth/2;
+		double ratio = (midPoint-(img1.cols-avg))/(double)avg;
+		
+		//std::cout << "avg: " << avg << " ratio: " <<  ratio << " midpoint: "<< midPoint << " (midPoint-(img1.cols-avg)): " << (midPoint-(img1.cols-avg))<< " (midPoint-(img1.cols-avg))/avg: " << (midPoint-(img1.cols-avg))/avg << std::endl;
+		img1buff = img1 * (1-ratio);
+		img2buff = img2 * ratio;
+		std::cout << "ratio: " << ratio << std::endl;
+		img1buff(cv::Rect(blobs[i].leftL, blobs[i].top, widthL, blobs[i].height)).copyTo(outputBuff1(cv::Rect(img1.cols-avg+blobs[i].leftR+blobs[i].d,blobs[i].top, widthL,blobs[i].height)),mask1(cv::Rect(blobs[i].leftL, blobs[i].top, widthL, blobs[i].height)));
+		img2buff(cv::Rect(blobs[i].leftR, blobs[i].top, widthR, blobs[i].height)).copyTo(outputBuff2(cv::Rect(img1.cols-avg+blobs[i].leftR+blobs[i].d,blobs[i].top, widthR,blobs[i].height)),mask2(cv::Rect(blobs[i].leftR, blobs[i].top, widthR, blobs[i].height)));
+		outputBuff(cv::Rect(img1.cols-avg+blobs[i].leftR+blobs[i].d,blobs[i].top, maxWidth,blobs[i].height)) = 0;
+		outputBuff += outputBuff2 + outputBuff1;
+		
+		outputBuff1 = 0;
+		outputBuff2 = 0;
+		img1buff = 0;
+		img2buff = 0;
+	}	
+		
+	return outputBuff;
+}	
+
 int frame_width = 3931;
 int frame_height = 1826;
 cv::VideoWriter output("out.avi",cv::VideoWriter::fourcc('M','J','P','G'),30,cv::Size(frame_width,frame_height));
@@ -275,11 +422,11 @@ cv::VideoWriter output_mask("out_mask.avi",cv::VideoWriter::fourcc('M','J','P','
 
 int main() 
 {
+	//CREATE VIDEO CAPTURE
+	cv::VideoCapture capLbkg("L1_squarefloor2_vid.h264");
+	cv::VideoCapture capRbkg("R1_squarefloor2_vid.h264");
 	
-	cv::VideoCapture capL("L1_squarefloor2_vid.h264");
-	cv::VideoCapture capR("R1_squarefloor2_vid.h264");
-	
-	if(!capL.isOpened() || !capR.isOpened())
+	if(!capLbkg.isOpened() || !capRbkg.isOpened())
 	{
 		cout << "Error opening video stream or file" << endl;
 		return -1;
@@ -291,12 +438,12 @@ int main()
 	//frames
 	while (imgL_bg.empty())
 	{
-		capL >> imgL_bg;
+		capLbkg >> imgL_bg;
 	}
 	
 	while (imgR_bg.empty())
 	{
-		capR >> imgR_bg;
+		capRbkg >> imgR_bg;
 	}
 	
 	//READ PRE-CALIBRATED PARAMETERS
@@ -320,11 +467,11 @@ int main()
     warpedR_size.height = warpedR_height;
     warpedR_size.width  = warpedR_width ;
 	
-	//GET FIFT FRAMES BECAUSE OF LIGHT CHANGES
-	for(int i=0;i<5;i++)
+	//GET FIFTH FRAMES BECAUSE OF LIGHT CHANGES
+	for(int i=0;i<60;i++)
 	{
-	capL >> imgL_bg;
-	capR >> imgR_bg;
+	capLbkg >> imgL_bg;
+	capRbkg >> imgR_bg;
 	}
 	//WARP FRAMES
 	
@@ -338,7 +485,6 @@ int main()
 	cv::Mat background;
 	cv::Mat mask = cv::Mat::zeros(imgR_bg_warp.size(), CV_8U);
 	
-		
 	cv::Mat mask_output = getStitchingMask(imgL_bg_warp, imgR_bg_warp, avg_h, mask);
 	background = horizontal_stitching_apply(imgL_bg_warp, imgR_bg_warp, avg_h, mask, mask_output);
 	
@@ -355,15 +501,35 @@ int main()
 	//Start Timer
 	int64 begin = getTickCount();
 	int64 t;
+	/////////////////////////////////////////////////////////////////////////
+	//CREATE VIDEO CAPTURE
+	cv::VideoCapture capL("cutL2.h264");
+	cv::VideoCapture capR("cutR2.h264");
 	
+	//frames
+	while (imgL.empty())
+	{
+		capL >> imgL;
+	}
+	
+	while (imgR.empty())
+	{
+		capR >> imgR;
+	}
+	//////////////////////////////////////////////////////////////////////// para ter o bkg
 	capL >> imgL;
 	capR >> imgR;
+	
+	cv::Mat maskL_warp, maskR_warp;
+	Matches_coordinates matches_coords;
+	vector<blob> blobs; 
+	cv::Mat result;
 	
 	while(1)
 	{
 		t = getTickCount();
 		std::cout << "Frame: " << count << std::endl;
-		count++;
+		count+=2;
 		
 		//WARP FRAMES
 		cv::warpPerspective(imgL, imgL_warp, Ht_L, warpedL_size);
@@ -372,37 +538,39 @@ int main()
 		//Allign features vertically
 		vertically_allign_apply(imgL_warp, imgR_warp, avg_v);
 		
-		//LINE STITCHING
-		cv::Mat result;
+		//GET OBJECTS MASK
+		getMask(imgL_bg_warp, imgL_warp, maskL_warp);
+		getMask(imgR_bg_warp, imgR_warp, maskR_warp);
 		
-		result = horizontal_stitching_apply(imgL_warp, imgR_warp, avg_h, mask, mask_output);
+		//GET MATCHES
+		getMatches(imgL_warp, imgR_warp, maskL_warp, maskR_warp, matches_coords);
+		
+		//GET BLOBS PAIRS
+		blobs = getBlobs(maskL_warp, maskR_warp, avg_h, matches_coords);
+		
+		//LINE STITCHING
+		
+		result = horizontal_blob_stitching_apply(imgL_warp, imgR_warp, imgL_bg_warp, imgR_bg_warp, avg_h, blobs);
 		
 		output.write(result);
 		
-		//GET MASK FROM BACKGOUND SUBTRACTION
-		cv::Mat result_mask, imgL_warp_mask, imgR_warp_mask;
+		//cv::imshow("Background", result);
+		for(int i = 0 ; i<2; i++)
+		{
+			capL >> imgL;
+			capR >> imgR;
+		}
 		
-		getMask(imgL_bg_warp, imgL_warp, imgL_warp_mask);
-		getMask(imgR_bg_warp, imgR_warp, imgR_warp_mask);
+		std::cout << " | " << "Elapsed Time: " << floor((getTickCount() - begin) / (getTickFrequency()*60)) << "m" << round(((getTickCount() - begin) / (getTickFrequency()))-floor((getTickCount() - begin) / (getTickFrequency()*60))*60) <<"s | Video Processed: " << round(count/30) << " s | PerFrame time: " << ((getTickCount() - t) / getTickFrequency()) << " s" << std::endl;
 		
-		drawSquares(imgL_warp_mask);
-		drawSquares(imgR_warp_mask);
-		
-		result_mask = horizontal_stitching_apply(imgL_warp_mask, imgR_warp_mask, avg_h, mask, mask_output);
-		output_mask.write(result_mask);
-		
-		cv::imshow("Background", result_mask);
-		
-		capL >> imgL;
-		capR >> imgR;
-		
-		std::cout << " | " << "Elapsed Time: " << ((getTickCount() - begin) / (getTickFrequency()*60)) << " s | Video Processed: " << round(count/30) << " s | PerFrame time: " << ((getTickCount() - t) / getTickFrequency()) << " s" << std::endl;
+		matches_coords = {};
+		blobs.clear();
 		
 		if(imgL.empty() || imgR.empty() || cv::waitKey(10) == 27) break;
 		
 	}
 	
-	std::cout << "Total elapsed time: " << ((getTickCount() - begin) / (getTickFrequency()*60)) << std::endl;
+	std::cout << "Total Elapsed Time: " << floor((getTickCount() - begin) / (getTickFrequency()*60)) << "m" << round(((getTickCount() - begin) / (getTickFrequency()))-floor((getTickCount() - begin) / (getTickFrequency()*60))*60) << "s" << std::endl;
 	capL.release();
 	capR.release();
 	output.release();
