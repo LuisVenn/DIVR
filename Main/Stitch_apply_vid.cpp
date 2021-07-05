@@ -23,13 +23,14 @@ cv::Size patternSize(6,9);
 struct blob {
   int top;
   int height;
-  int leftL;
-  int widthL;
-  int leftR;
-  int widthR;
+  int leftL = 2;
+  int widthL = 2;
+  int leftR = 2;
+  int widthR = 2;
   int dtotal;
   int nfeatures;
   int d;
+  bool pair = 0;
 };
 
 struct Matches_coordinates {
@@ -191,21 +192,27 @@ vector<blob> getBlobs(cv::Mat mask1, cv::Mat mask2, int avg, Matches_coordinates
 	int nLabelsR = connectedComponentsWithStats(mask2, mask3, statR,centroid,8, CV_16U);
 	int w = mask1.cols;
 	blob blob_buff;
-	int maxLabels = nLabelsL;
-	if(nLabelsR>nLabelsL) maxLabels = nLabelsR;
 	
-	vector<blob> blobs(maxLabels);
-	if(nLabelsL <= 1 || nLabelsR <= 1) 
-	{	
-	std::cout << "não há blobs em nLabelsL: " << nLabelsL << "ou nLabelsR: " << nLabelsR << std::endl; 
-	vector<blob> blobsNull(0);
-	return blobsNull;
+	vector<blob> blobsL(nLabelsL - 1);
+	vector<blob> blobsR(nLabelsR - 1);
+	
+	for(int i = 1; i < nLabelsL; i++)
+	{
+		blobsL[i-1].top = statL.at<int>(i,CC_STAT_TOP);
+		blobsL[i-1].height = statL.at<int>(i,CC_STAT_HEIGHT);
+		blobsL[i-1].leftL = statL.at<int>(i,CC_STAT_LEFT);
+		blobsL[i-1].widthL = statL.at<int>(i,CC_STAT_WIDTH);
 	}
 	
-	for(int i=0;i<2;i++)
+	for(int i = 1; i < nLabelsR; i++)
 	{
-		std::cout << "blob " << i << " : Left: " << statR.at<int>(i,CC_STAT_LEFT) << "Width: " << statR.at<int>(i,CC_STAT_WIDTH) << std::endl;  
-	} 
+		blobsR[i-1].top = statR.at<int>(i,CC_STAT_TOP);
+		blobsR[i-1].height = statR.at<int>(i,CC_STAT_HEIGHT);
+		blobsR[i-1].leftR = statR.at<int>(i,CC_STAT_LEFT);
+		blobsR[i-1].widthR = statR.at<int>(i,CC_STAT_WIDTH);
+	}
+	std::cout << "1 tamanho de blobsL:" << blobsL.size() << std::endl; 
+	std::cout << "1 tamanho de blobsR:" << blobsR.size() << std::endl; 
 	for (size_t imatch = 0; imatch < matches_coords.L.size(); imatch++)
     {
 		cv::Point pt1 = matches_coords.L[imatch];
@@ -213,56 +220,52 @@ vector<blob> getBlobs(cv::Mat mask1, cv::Mat mask2, int avg, Matches_coordinates
 
 		for (int i=1;i<nLabelsL;i++) //the first one is the background
 		{
-			if((pt1.x >= statL.at<int>(i,CC_STAT_LEFT)) && (pt1.x <= (statL.at<int>(i,CC_STAT_LEFT) + statL.at<int>(i,CC_STAT_WIDTH)) && (pt1.y >= statL.at<int>(i,CC_STAT_TOP)) && (pt1.y <= (statL.at<int>(i,CC_STAT_TOP) + statL.at<int>(i,CC_STAT_HEIGHT)))))
+			if((pt1.x >= blobsL[i-1].leftL) && (pt1.x <= (blobsL[i-1].leftL + blobsL[i-1].widthL)) && (pt1.y >= blobsL[i-1].top) && (pt1.y <= (blobsL[i-1].top + blobsL[i-1].height)))
 			{
-				//std::cout << "pertence a esquerda: "<< i << std::endl;
-			
 				for(int i2=1; i2<nLabelsR; i2++)
 				{
-					if((pt2.x >= statR.at<int>(i2,CC_STAT_LEFT)) && (pt2.x <= (statR.at<int>(i2,CC_STAT_LEFT) + statR.at<int>(i2,CC_STAT_WIDTH)) && (pt2.y >= statR.at<int>(i2,CC_STAT_TOP)) && (pt2.y <= (statR.at<int>(i2,CC_STAT_TOP) + statR.at<int>(i2,CC_STAT_HEIGHT)))))
+					if((pt2.x >= blobsR[i2-1].leftR) && (pt2.x <= (blobsR[i2-1].leftR + blobsR[i2-1].widthR) && (pt2.y >= blobsR[i2-1].top) && (blobsR[i2-1].top + blobsR[i2-1].height)))
 					{
-						//std::cout << "pertence a direita: " << i2 << std::endl;	
-						if(!blobs[i].top)
+						if(blobsL[i-1].pair == 0)
 						{
-							//std::cout << "criou" << std::endl;
-							blobs[i].top = statL.at<int>(i,CC_STAT_TOP);
-							blobs[i].height = statL.at<int>(i,CC_STAT_HEIGHT);
-							blobs[i].leftL = statL.at<int>(i,CC_STAT_LEFT);
-							blobs[i].widthL = statL.at<int>(i,CC_STAT_WIDTH);
-							blobs[i].leftR = statR.at<int>(i2,CC_STAT_LEFT);
-							blobs[i].widthR = statR.at<int>(i2,CC_STAT_WIDTH);
-					
+							blobsL[i-1].leftR = blobsR[i2-1].leftR;
+							blobsL[i-1].widthR = blobsR[i2-1].widthR;
+							blobsL[i-1].pair = 1;
+							blobsR[i2-1].pair = 1;
 						}
-						blobs[i].dtotal += ((w - pt1.x) + pt2.x);
-						blobs[i].nfeatures += 1;
+						blobsL[i-1].dtotal += ((w - pt1.x) + pt2.x);
+						blobsL[i-1].nfeatures += 1;
 						break;
 					}
 				}
 			}
 		}
 	}
-	//Get average distance and remove blobs with no features
-	for (int i=0;i<blobs.size();i++) //the first one is the background?
+	//Calculate d on pairs, delete pairs in R and add the rest of R to L
+	for (int i=0;i<blobsL.size();i++) 
 	{
-		//std::cout << "Blob nº "<< i << " Top: " << blobs[i].top << " Height: " << blobs[i].height  << " dtotal: " << blobs[i].dtotal << " nfeatures: " << blobs[i].nfeatures << " d: " << blobs[i].d << std::endl;
-		if(blobs[i].nfeatures>0) 
+		if(blobsL[i].nfeatures>0) blobsL[i].d = (avg-(blobsL[i].dtotal/blobsL[i].nfeatures))/2;	
+	}
+	
+	for(int i = 0; i<blobsR.size();i++)
+	{
+		if(blobsR[i].pair == 1) 
 		{
-			blobs[i].d = (avg-(blobs[i].dtotal/blobs[i].nfeatures))/2;
-		}else{
-			blobs.erase(blobs.begin()+i);
+			blobsR.erase(blobsR.begin()+i);
 			i--;
 		}
 	}
-	//std::cout << "No features blobs removed" << std::endl;
-	for (int i=0;i<blobs.size();i++) 
+	std::cout << "2 tamanho de blobsL:" << blobsL.size() << std::endl; 
+	std::cout << "2 tamanho de blobsR:" << blobsR.size() << std::endl; 
+	for(int i = 0; i<blobsR.size();i++)
 	{
-		std::cout << "Blob nº "<< i << " Top: " << blobs[i].top << " Height: " << blobs[i].height  << " dtotal: " << blobs[i].dtotal << " nfeatures: " << blobs[i].nfeatures << " d: " << blobs[i].d << std::endl;
-		std::cout << " LeftL: " << blobs[i].leftL <<" WidthL: " << blobs[i].widthL << " LeftR: " << blobs[i].leftR <<" WidthR: " << blobs[i].widthR << std::endl;
-		std::cout << avg<< std::endl;
-	}
-	sort(blobs.begin(),blobs.end(),organizablob);
-	std::cout << "number of blobs with features: " << blobs.size() << std::endl;
-	return blobs;
+		blobsL.push_back(blobsR[i]);
+	}		
+	std::cout << "3 tamanho de blobsL:" << blobsL.size() << std::endl; 
+	std::cout << "3 tamanho de blobsR:" << blobsR.size() << std::endl; 
+	sort(blobsL.begin(),blobsL.end(),organizablob);
+	
+	return blobsL;
 }
 
 cv::Mat getStitchingMask(cv::Mat img1, cv::Mat img2, int avg, cv::Mat &mask)
@@ -383,37 +386,55 @@ cv::Mat horizontal_blob_stitching_apply(cv::Mat &img1, cv::Mat &img2, cv::Mat bk
 	{
 		widthL = blobs[i].widthL;
 		widthR = blobs[i].widthR;
-		maxWidth = widthR;
-		if(widthL > widthR)
+		if(blobs[i].pair == 0)
 		{
-			 maxWidth = widthL;
-			 widthR = widthL;
-		}else widthL = widthR;
-		
-		if(widthL > img1.cols - blobs[i].leftL) widthL = blobs[i].widthL; 
-		//if(widthR > blobs[i].leftL  blobs[i].leftL) widthL = blobs[i].widthL; nao acontece pq ele tira sempre da esq para a direita
-		//widthR = blobs[i].widthR;
-		
-		int midPoint = img1.cols-avg+blobs[i].leftR+blobs[i].d + maxWidth/2;
-		double ratio = (midPoint-(img1.cols-avg))/(double)avg;
-		
-		//std::cout << "avg: " << avg << " ratio: " <<  ratio << " midpoint: "<< midPoint << " (midPoint-(img1.cols-avg)): " << (midPoint-(img1.cols-avg))<< " (midPoint-(img1.cols-avg))/avg: " << (midPoint-(img1.cols-avg))/avg << std::endl;
-		img1buff = img1 * (1-ratio);
-		img2buff = img2 * ratio;
-		std::cout << "ratio: " << ratio << std::endl;
-		img1buff(cv::Rect(blobs[i].leftL, blobs[i].top, widthL, blobs[i].height)).copyTo(outputBuff1(cv::Rect(img1.cols-avg+blobs[i].leftR+blobs[i].d,blobs[i].top, widthL,blobs[i].height)),mask1(cv::Rect(blobs[i].leftL, blobs[i].top, widthL, blobs[i].height)));
-		img2buff(cv::Rect(blobs[i].leftR, blobs[i].top, widthR, blobs[i].height)).copyTo(outputBuff2(cv::Rect(img1.cols-avg+blobs[i].leftR+blobs[i].d,blobs[i].top, widthR,blobs[i].height)),mask2(cv::Rect(blobs[i].leftR, blobs[i].top, widthR, blobs[i].height)));
-		outputBuff(cv::Rect(img1.cols-avg+blobs[i].leftR+blobs[i].d,blobs[i].top, maxWidth,blobs[i].height)) = 0;
-		outputBuff += outputBuff2 + outputBuff1;
-		
+			if(blobs[i].leftR == 2)
+			{
+				img1buff = img1;
+				img1buff(cv::Rect(blobs[i].leftL, blobs[i].top, widthL, blobs[i].height)).copyTo(outputBuff(cv::Rect(blobs[i].leftL-blobs[i].d,blobs[i].top, widthL,blobs[i].height)),mask1(cv::Rect(blobs[i].leftL, blobs[i].top, widthL, blobs[i].height)));
+			}else
+			{
+				std::cout << "fdss: " << widthR << std::endl;
+				img2buff = img2;
+				img2buff(cv::Rect(blobs[i].leftR, blobs[i].top, widthR, blobs[i].height)).copyTo(outputBuff(cv::Rect(img1.cols-avg+blobs[i].leftR+blobs[i].d,blobs[i].top, widthR,blobs[i].height)),mask2(cv::Rect(blobs[i].leftR, blobs[i].top, widthR, blobs[i].height)));
+				std::cout << "fdss" << std::endl;
+			}
+		}else
+		{
+			maxWidth = widthR;
+			
+			if(widthL > widthR)
+			{
+				 maxWidth = widthL;
+				 widthR = widthL;
+			}else widthL = widthR;
+			
+			if(widthL > img1.cols - blobs[i].leftL) widthL = blobs[i].widthL; 
+			//if(widthR > blobs[i].leftL  blobs[i].leftL) widthL = blobs[i].widthL; nao acontece pq ele tira sempre da esq para a direita
+			//widthR = blobs[i].widthR;
+			
+			int midPoint = img1.cols-avg+blobs[i].leftR+blobs[i].d + maxWidth/2;
+			double ratio = (midPoint-(img1.cols-avg))/(double)avg;
+			
+			//std::cout << "avg: " << avg << " ratio: " <<  ratio << " midpoint: "<< midPoint << " (midPoint-(img1.cols-avg)): " << (midPoint-(img1.cols-avg))<< " (midPoint-(img1.cols-avg))/avg: " << (midPoint-(img1.cols-avg))/avg << std::endl;
+			img1buff = img1 * (1-ratio);
+			img2buff = img2 * ratio;
+			std::cout << "ratio: " << ratio << std::endl;
+			
+			img1buff(cv::Rect(blobs[i].leftL, blobs[i].top, widthL, blobs[i].height)).copyTo(outputBuff1(cv::Rect(img1.cols-avg+blobs[i].leftR+blobs[i].d,blobs[i].top, widthL,blobs[i].height)),mask1(cv::Rect(blobs[i].leftL, blobs[i].top, widthL, blobs[i].height)));
+			img2buff(cv::Rect(blobs[i].leftR, blobs[i].top, widthR, blobs[i].height)).copyTo(outputBuff2(cv::Rect(img1.cols-avg+blobs[i].leftR+blobs[i].d,blobs[i].top, widthR,blobs[i].height)),mask2(cv::Rect(blobs[i].leftR, blobs[i].top, widthR, blobs[i].height)));
+			outputBuff(cv::Rect(img1.cols-avg+blobs[i].leftR+blobs[i].d,blobs[i].top, maxWidth,blobs[i].height)) = 0;
+			outputBuff += outputBuff2 + outputBuff1;
+		}		
 		outputBuff1 = 0;
 		outputBuff2 = 0;
 		img1buff = 0;
 		img2buff = 0;
-	}	
-		
+	}
+
 	return outputBuff;
-}	
+}
+	
 
 int frame_width = 3931;
 int frame_height = 1826;
@@ -554,8 +575,8 @@ int main()
 		
 		output.write(result);
 		
-		//cv::imshow("Background", result);
-		for(int i = 0 ; i<2; i++)
+		cv::imshow("Background", result);
+		for(int i = 0 ; i<30; i++)
 		{
 			capL >> imgL;
 			capR >> imgR;
