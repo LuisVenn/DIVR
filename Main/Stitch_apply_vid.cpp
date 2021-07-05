@@ -140,7 +140,7 @@ void getMatches(cv::Mat img1, cv::Mat img2, cv::Mat mask1, cv::Mat mask2, Matche
    	
    	for (size_t i = 0; i < sorted_matches.size(); i++)
     {
-		if (sorted_matches[i].distance < 45)
+		if (sorted_matches[i].distance < 30)
 		{
 			good_matches.push_back(sorted_matches[i]);
 			matches_coords.L.push_back(keypoints1[sorted_matches[i].queryIdx].pt);
@@ -242,6 +242,24 @@ vector<blob> getBlobs(cv::Mat mask1, cv::Mat mask2, int avg, Matches_coordinates
 		}
 	}
 	//Calculate d on pairs, delete pairs in R and add the rest of R to L
+	
+	for (int i=0;i<blobsL.size();i++) 
+	{
+		if(blobsL[i].nfeatures == 0 && blobsL[i].leftL > mask1.cols-avg)
+		{
+			blobsL.erase(blobsL.begin()+i);
+			i--;
+		}	
+	}
+	for (int i=0;i<blobsR.size();i++) 
+	{
+		if(blobsR[i].nfeatures == 0 && blobsR[i].leftR < avg)
+		{
+			blobsR.erase(blobsR.begin()+i);
+			i--;
+		}	
+	}
+	
 	for (int i=0;i<blobsL.size();i++) 
 	{
 		if(blobsL[i].nfeatures>0) blobsL[i].d = (avg-(blobsL[i].dtotal/blobsL[i].nfeatures))/2;	
@@ -394,10 +412,8 @@ cv::Mat horizontal_blob_stitching_apply(cv::Mat &img1, cv::Mat &img2, cv::Mat bk
 				img1buff(cv::Rect(blobs[i].leftL, blobs[i].top, widthL, blobs[i].height)).copyTo(outputBuff(cv::Rect(blobs[i].leftL-blobs[i].d,blobs[i].top, widthL,blobs[i].height)),mask1(cv::Rect(blobs[i].leftL, blobs[i].top, widthL, blobs[i].height)));
 			}else
 			{
-				std::cout << "fdss: " << widthR << std::endl;
 				img2buff = img2;
 				img2buff(cv::Rect(blobs[i].leftR, blobs[i].top, widthR, blobs[i].height)).copyTo(outputBuff(cv::Rect(img1.cols-avg+blobs[i].leftR+blobs[i].d,blobs[i].top, widthR,blobs[i].height)),mask2(cv::Rect(blobs[i].leftR, blobs[i].top, widthR, blobs[i].height)));
-				std::cout << "fdss" << std::endl;
 			}
 		}else
 		{
@@ -413,7 +429,13 @@ cv::Mat horizontal_blob_stitching_apply(cv::Mat &img1, cv::Mat &img2, cv::Mat bk
 			//if(widthR > blobs[i].leftL  blobs[i].leftL) widthL = blobs[i].widthL; nao acontece pq ele tira sempre da esq para a direita
 			//widthR = blobs[i].widthR;
 			
-			int midPoint = img1.cols-avg+blobs[i].leftR+blobs[i].d + maxWidth/2;
+			//Calculate bb center considering the position
+			
+			int StitchingX = img1.cols-avg+blobs[i].leftR + blobs[i].d;
+			if(img1.cols-blobs[i].leftL > blobs[i].leftR) StitchingX = blobs[i].leftL-blobs[i].d;
+			
+			int midPoint = StitchingX + maxWidth/2;
+			
 			double ratio = (midPoint-(img1.cols-avg))/(double)avg;
 			
 			//std::cout << "avg: " << avg << " ratio: " <<  ratio << " midpoint: "<< midPoint << " (midPoint-(img1.cols-avg)): " << (midPoint-(img1.cols-avg))<< " (midPoint-(img1.cols-avg))/avg: " << (midPoint-(img1.cols-avg))/avg << std::endl;
@@ -421,9 +443,9 @@ cv::Mat horizontal_blob_stitching_apply(cv::Mat &img1, cv::Mat &img2, cv::Mat bk
 			img2buff = img2 * ratio;
 			std::cout << "ratio: " << ratio << std::endl;
 			
-			img1buff(cv::Rect(blobs[i].leftL, blobs[i].top, widthL, blobs[i].height)).copyTo(outputBuff1(cv::Rect(img1.cols-avg+blobs[i].leftR+blobs[i].d,blobs[i].top, widthL,blobs[i].height)),mask1(cv::Rect(blobs[i].leftL, blobs[i].top, widthL, blobs[i].height)));
-			img2buff(cv::Rect(blobs[i].leftR, blobs[i].top, widthR, blobs[i].height)).copyTo(outputBuff2(cv::Rect(img1.cols-avg+blobs[i].leftR+blobs[i].d,blobs[i].top, widthR,blobs[i].height)),mask2(cv::Rect(blobs[i].leftR, blobs[i].top, widthR, blobs[i].height)));
-			outputBuff(cv::Rect(img1.cols-avg+blobs[i].leftR+blobs[i].d,blobs[i].top, maxWidth,blobs[i].height)) = 0;
+			img1buff(cv::Rect(blobs[i].leftL, blobs[i].top, widthL, blobs[i].height)).copyTo(outputBuff1(cv::Rect(StitchingX, blobs[i].top, widthL,blobs[i].height)),mask1(cv::Rect(blobs[i].leftL, blobs[i].top, widthL, blobs[i].height)));
+			img2buff(cv::Rect(blobs[i].leftR, blobs[i].top, widthR, blobs[i].height)).copyTo(outputBuff2(cv::Rect(StitchingX, blobs[i].top, widthR,blobs[i].height)),mask2(cv::Rect(blobs[i].leftR, blobs[i].top, widthR, blobs[i].height)));
+			outputBuff(cv::Rect(StitchingX, blobs[i].top, maxWidth, blobs[i].height)) = 0;
 			outputBuff += outputBuff2 + outputBuff1;
 		}		
 		outputBuff1 = 0;
@@ -439,7 +461,7 @@ cv::Mat horizontal_blob_stitching_apply(cv::Mat &img1, cv::Mat &img2, cv::Mat bk
 int frame_width = 3931;
 int frame_height = 1826;
 cv::VideoWriter output("out.avi",cv::VideoWriter::fourcc('M','J','P','G'),30,cv::Size(frame_width,frame_height));
-cv::VideoWriter output_mask("out_mask.avi",cv::VideoWriter::fourcc('M','J','P','G'),30,cv::Size(frame_width,frame_height), false);
+//cv::VideoWriter output_mask("out_mask.avi",cv::VideoWriter::fourcc('M','J','P','G'),30,cv::Size(frame_width,frame_height), false);
 
 int main() 
 {
@@ -511,10 +533,10 @@ int main()
 	
 	//SHOW BACKGROUND
 	
-	cv::namedWindow("Background",cv::WINDOW_NORMAL);
-	cv::resizeWindow("Background",960,536);
-	cv::imshow("Background", background);
-	cv::waitKey();
+	//cv::namedWindow("Background",cv::WINDOW_NORMAL);
+	//cv::resizeWindow("Background",960,536);
+	//cv::imshow("Background", background);
+	//cv::waitKey();
 	
 	std::cout << "Background size: " << background.size() << std::endl;
 	int count = 1;
@@ -575,8 +597,8 @@ int main()
 		
 		output.write(result);
 		
-		cv::imshow("Background", result);
-		for(int i = 0 ; i<30; i++)
+		//cv::imshow("Background", result);
+		for(int i = 0 ; i<1; i++)
 		{
 			capL >> imgL;
 			capR >> imgR;
@@ -595,7 +617,7 @@ int main()
 	capL.release();
 	capR.release();
 	output.release();
-	output_mask.release();
+//	output_mask.release();
 	destroyAllWindows();
 			
 }
