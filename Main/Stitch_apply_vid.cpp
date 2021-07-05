@@ -211,8 +211,8 @@ vector<blob> getBlobs(cv::Mat mask1, cv::Mat mask2, int avg, Matches_coordinates
 		blobsR[i-1].leftR = statR.at<int>(i,CC_STAT_LEFT);
 		blobsR[i-1].widthR = statR.at<int>(i,CC_STAT_WIDTH);
 	}
-	std::cout << "1 tamanho de blobsL:" << blobsL.size() << std::endl; 
-	std::cout << "1 tamanho de blobsR:" << blobsR.size() << std::endl; 
+	//std::cout << "1 tamanho de blobsL:" << blobsL.size() << std::endl; 
+	//std::cout << "1 tamanho de blobsR:" << blobsR.size() << std::endl; 
 	for (size_t imatch = 0; imatch < matches_coords.L.size(); imatch++)
     {
 		cv::Point pt1 = matches_coords.L[imatch];
@@ -242,10 +242,10 @@ vector<blob> getBlobs(cv::Mat mask1, cv::Mat mask2, int avg, Matches_coordinates
 		}
 	}
 	//Calculate d on pairs, delete pairs in R and add the rest of R to L
-	
+	/*
 	for (int i=0;i<blobsL.size();i++) 
 	{
-		if(blobsL[i].nfeatures == 0 && blobsL[i].leftL > mask1.cols-avg)
+		if(blobsL[i].nfeatures == 0 && blobsL[i].leftL + blobsL[i].widthL > mask1.cols-avg)
 		{
 			blobsL.erase(blobsL.begin()+i);
 			i--;
@@ -259,7 +259,7 @@ vector<blob> getBlobs(cv::Mat mask1, cv::Mat mask2, int avg, Matches_coordinates
 			i--;
 		}	
 	}
-	
+	*/
 	for (int i=0;i<blobsL.size();i++) 
 	{
 		if(blobsL[i].nfeatures>0) blobsL[i].d = (avg-(blobsL[i].dtotal/blobsL[i].nfeatures))/2;	
@@ -273,14 +273,14 @@ vector<blob> getBlobs(cv::Mat mask1, cv::Mat mask2, int avg, Matches_coordinates
 			i--;
 		}
 	}
-	std::cout << "2 tamanho de blobsL:" << blobsL.size() << std::endl; 
-	std::cout << "2 tamanho de blobsR:" << blobsR.size() << std::endl; 
+	//std::cout << "2 tamanho de blobsL:" << blobsL.size() << std::endl; 
+	//std::cout << "2 tamanho de blobsR:" << blobsR.size() << std::endl; 
 	for(int i = 0; i<blobsR.size();i++)
 	{
 		blobsL.push_back(blobsR[i]);
 	}		
-	std::cout << "3 tamanho de blobsL:" << blobsL.size() << std::endl; 
-	std::cout << "3 tamanho de blobsR:" << blobsR.size() << std::endl; 
+	//std::cout << "3 tamanho de blobsL:" << blobsL.size() << std::endl; 
+	//std::cout << "3 tamanho de blobsR:" << blobsR.size() << std::endl; 
 	sort(blobsL.begin(),blobsL.end(),organizablob);
 	
 	return blobsL;
@@ -457,6 +457,49 @@ cv::Mat horizontal_blob_stitching_apply(cv::Mat &img1, cv::Mat &img2, cv::Mat bk
 	return outputBuff;
 }
 	
+cv::Mat horizontal_stitching_apply(cv::Mat &img1, cv::Mat &img2,int avg)
+{
+	cv::Mat output = img1.clone();
+	
+	//Create buffer
+	int right = img2.cols - avg;
+    int borderType = cv::BORDER_CONSTANT;
+    int no = 0;
+    int buff = 0;
+    cv::Scalar value(255,255,255);
+	if(img2.rows >img1.rows) buff = img2.rows-img1.rows;
+	
+	//Create Border
+
+	copyMakeBorder( img1, output, no, buff, no, right, borderType, value );
+	
+	//Create Mask
+	cv::Mat mask = cv::Mat::zeros(img2.size(), CV_8U);
+	cv::Mat mask_output = cv::Mat::zeros(output.size(), CV_8U);
+	cv::Mat img2_gray, output_gray;
+	cv::cvtColor( img2, img2_gray, cv::COLOR_RGB2GRAY );
+	cv::cvtColor( output, output_gray, cv::COLOR_RGB2GRAY);
+	
+	mask.setTo(255, img2_gray > 0);
+    mask_output.setTo(255, output_gray > 0);
+    mask_output.setTo(0,output_gray == 255);
+    cv::Mat outputBuff = output.clone();
+    
+    outputBuff.setTo(cv::Scalar(255,255,255));
+    output.copyTo(outputBuff,mask_output);
+    
+	img2.copyTo(outputBuff(cv::Rect(img1.cols-avg,0,img2.cols,img2.rows)),mask);
+	
+	//Get ghost image
+	
+	cv::Mat outputBuff2 = outputBuff.clone();
+	output.copyTo(outputBuff,mask_output);
+	
+	cv::Mat outputGhost = outputBuff2*0.5 + outputBuff*0.5;
+	
+	//If want to show ghost change to outputGhost
+	return outputGhost;
+}	
 
 int frame_width = 3931;
 int frame_height = 1826;
@@ -594,11 +637,11 @@ int main()
 		//LINE STITCHING
 		
 		result = horizontal_blob_stitching_apply(imgL_warp, imgR_warp, imgL_bg_warp, imgR_bg_warp, avg_h, blobs);
-		
+		//result = horizontal_stitching_apply(imgL_warp,imgR_warp,avg_h);
 		output.write(result);
 		
 		//cv::imshow("Background", result);
-		for(int i = 0 ; i<1; i++)
+		for(int i = 0 ; i<2; i++)
 		{
 			capL >> imgL;
 			capR >> imgR;
@@ -617,7 +660,7 @@ int main()
 	capL.release();
 	capR.release();
 	output.release();
-//	output_mask.release();
+	//output_mask.release();
 	destroyAllWindows();
 			
 }
