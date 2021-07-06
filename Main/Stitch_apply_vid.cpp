@@ -19,6 +19,7 @@ using namespace cv;
 using namespace cv::detail;
 
 cv::Size patternSize(6,9);
+int stitchingX_buff;
 
 struct blob {
   int top;
@@ -31,6 +32,7 @@ struct blob {
   int nfeatures;
   int d;
   bool pair = 0;
+  Point centroid;
 };
 
 struct Matches_coordinates {
@@ -187,9 +189,9 @@ vector<blob> getBlobs(cv::Mat mask1, cv::Mat mask2, int avg, Matches_coordinates
 {
    //In wich blobs are this features
 	
-	cv::Mat statL,statR,centroid,mask3; //para que preciso da mask3??
-	int nLabelsL = connectedComponentsWithStats(mask1, mask3, statL,centroid,8, CV_16U);
-	int nLabelsR = connectedComponentsWithStats(mask2, mask3, statR,centroid,8, CV_16U);
+	cv::Mat statL,statR,centroidL,centroidR,mask3; //para que preciso da mask3??
+	int nLabelsL = connectedComponentsWithStats(mask1, mask3, statL,centroidL,8, CV_16U);
+	int nLabelsR = connectedComponentsWithStats(mask2, mask3, statR,centroidR,8, CV_16U);
 	int w = mask1.cols;
 	blob blob_buff;
 	
@@ -202,6 +204,8 @@ vector<blob> getBlobs(cv::Mat mask1, cv::Mat mask2, int avg, Matches_coordinates
 		blobsL[i-1].height = statL.at<int>(i,CC_STAT_HEIGHT);
 		blobsL[i-1].leftL = statL.at<int>(i,CC_STAT_LEFT);
 		blobsL[i-1].widthL = statL.at<int>(i,CC_STAT_WIDTH);
+		Point p1(statL.at<int>(i,CC_STAT_LEFT)+statL.at<int>(i,CC_STAT_WIDTH)/2,statL.at<int>(i,CC_STAT_TOP)+statL.at<int>(i,CC_STAT_HEIGHT)/2);
+		blobsL[i-1].centroid = p1;
 	}
 	
 	for(int i = 1; i < nLabelsR; i++)
@@ -210,6 +214,9 @@ vector<blob> getBlobs(cv::Mat mask1, cv::Mat mask2, int avg, Matches_coordinates
 		blobsR[i-1].height = statR.at<int>(i,CC_STAT_HEIGHT);
 		blobsR[i-1].leftR = statR.at<int>(i,CC_STAT_LEFT);
 		blobsR[i-1].widthR = statR.at<int>(i,CC_STAT_WIDTH);
+		Point p1(statR.at<int>(i,CC_STAT_LEFT)+statR.at<int>(i,CC_STAT_WIDTH)/2,statR.at<int>(i,CC_STAT_TOP)+statR.at<int>(i,CC_STAT_HEIGHT)/2);
+		blobsR[i-1].centroid = p1;
+		
 	}
 	//std::cout << "1 tamanho de blobsL:" << blobsL.size() << std::endl; 
 	//std::cout << "1 tamanho de blobsR:" << blobsR.size() << std::endl; 
@@ -232,6 +239,7 @@ vector<blob> getBlobs(cv::Mat mask1, cv::Mat mask2, int avg, Matches_coordinates
 							blobsL[i-1].widthR = blobsR[i2-1].widthR;
 							blobsL[i-1].pair = 1;
 							blobsR[i2-1].pair = 1;
+							blobsL[i-1].d = (blobsL[i-1].centroid.x - (mask1.cols - avg + blobsR[i2-1].centroid.x))/2;
 						}
 						blobsL[i-1].dtotal += ((w - pt1.x) + pt2.x);
 						blobsL[i-1].nfeatures += 1;
@@ -260,10 +268,10 @@ vector<blob> getBlobs(cv::Mat mask1, cv::Mat mask2, int avg, Matches_coordinates
 		}	
 	}
 	*/
-	for (int i=0;i<blobsL.size();i++) 
-	{
-		if(blobsL[i].nfeatures>0) blobsL[i].d = (avg-(blobsL[i].dtotal/blobsL[i].nfeatures))/2;	
-	}
+	//for (int i=0;i<blobsL.size();i++) 
+	//{
+		//if(blobsL[i].nfeatures>0) blobsL[i].d = (avg-(blobsL[i].dtotal/blobsL[i].nfeatures))/2;	
+	//}
 	
 	for(int i = 0; i<blobsR.size();i++)
 	{
@@ -393,7 +401,7 @@ cv::Mat horizontal_blob_stitching_apply(cv::Mat &img1, cv::Mat &img2, cv::Mat bk
 	img1_patched(cv::Rect(0,0,img1_patched.cols,img1_patched.rows)).copyTo(outputBuff(cv::Rect(0,0,img1_patched.cols,img1_patched.rows)),mask1(cv::Rect(0,0,img1_patched.cols,img1_patched.rows)));
 	img2_patched(cv::Rect(0,0,img2_patched.cols,img2_patched.rows)).copyTo(outputBuff(cv::Rect(img1.cols-avg,0,img2_patched.cols,img2_patched.rows)),mask2(cv::Rect(0,0,img2_patched.cols,img2_patched.rows)));
 	
-	//Stamp the blob on the "virtual camera" position"
+	//Stamp the blob on the "virtual camera" position
 	
 	cv::Mat outputBuff2 ;
 	outputBuff2 = Mat::zeros(outputBuff.rows, outputBuff.cols, CV_8UC3);
@@ -431,7 +439,9 @@ cv::Mat horizontal_blob_stitching_apply(cv::Mat &img1, cv::Mat &img2, cv::Mat bk
 			
 			//Calculate bb center considering the position
 			
-			int StitchingX = img1.cols-avg+blobs[i].leftR + blobs[i].d;
+			int StitchingX = blobs[i].centroid.x + blobs[i].d;
+			std::cout << "StitchingX: " << StitchingX << std::endl;
+			std::cout << "d: " << blobs[i].d << " centroid: (" << blobs[i].centroid.x << ", " << blobs[i].centroid.y << ")" << std::endl;
 			if(img1.cols-blobs[i].leftL > blobs[i].leftR) StitchingX = blobs[i].leftL-blobs[i].d;
 			
 			int midPoint = StitchingX + maxWidth/2;
@@ -504,6 +514,8 @@ cv::Mat horizontal_stitching_apply(cv::Mat &img1, cv::Mat &img2,int avg)
 int frame_width = 3931;
 int frame_height = 1826;
 cv::VideoWriter output("out.avi",cv::VideoWriter::fourcc('M','J','P','G'),30,cv::Size(frame_width,frame_height));
+cv::VideoWriter output_maskL("maskL.avi",cv::VideoWriter::fourcc('M','J','P','G'),30,cv::Size(2394, 1813),false);
+cv::VideoWriter output_maskR("maskR.avi",cv::VideoWriter::fourcc('M','J','P','G'),30,cv::Size(2359, 1826),false);
 //cv::VideoWriter output_mask("out_mask.avi",cv::VideoWriter::fourcc('M','J','P','G'),30,cv::Size(frame_width,frame_height), false);
 
 int main() 
@@ -628,6 +640,10 @@ int main()
 		getMask(imgL_bg_warp, imgL_warp, maskL_warp);
 		getMask(imgR_bg_warp, imgR_warp, maskR_warp);
 		
+		
+		output_maskL.write(maskL_warp);
+		output_maskR.write(maskR_warp);
+		
 		//GET MATCHES
 		getMatches(imgL_warp, imgR_warp, maskL_warp, maskR_warp, matches_coords);
 		
@@ -661,6 +677,8 @@ int main()
 	capR.release();
 	output.release();
 	//output_mask.release();
+	output_maskL.release();
+	output_maskR.release();
 	destroyAllWindows();
 			
 }
