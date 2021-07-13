@@ -71,12 +71,6 @@ static void drawEpipolarLines(cv::Mat F, cv::Mat& img1, cv::Mat& img2, vector<Po
       //color);
     cv::circle(outImg(rect2), points2[i], 3, color, -1, LINE_AA);
   }
-  
-  cv::namedWindow("matches",cv::WINDOW_NORMAL);
-  cv::resizeWindow("matches",960,536);
-  cv::setMouseCallback("matches", onMouse, reinterpret_cast<void *>(&outImg));
-  cv::imshow("matches", outImg);
-  cv::waitKey(0);
 }
 
 static void drawOneLine (cv::Mat F, cv::Mat& img1, cv::Mat& img2, vector<Point2f> points1)
@@ -112,41 +106,126 @@ static void drawOneLine (cv::Mat F, cv::Mat& img1, cv::Mat& img2, vector<Point2f
   
   cv::namedWindow("matches2",cv::WINDOW_NORMAL);
   cv::resizeWindow("matches2",960,536);
+  cv::setMouseCallback("matches2", onMouse, reinterpret_cast<void *>(&outImg));
   cv::imshow("matches2", outImg);
   cv::waitKey(0);
 }
 int main(){
-	
-	std::cout << "-- Reading Images --" << std::endl;
-	cv::Mat imgL, imgR;
-	
-	imgL = cv::imread("../Images/squarefloor2/L1_squarefloor2_chess1.jpg");
-	imgR = cv::imread("../Images/squarefloor2/R1_squarefloor2_chess1.jpg");
-	
-	vector<Point2f> cornersL, cornersR;
-	
-	bool found1 = cv::findChessboardCorners(imgL, patternSize, cornersL);
-	bool found2 = cv::findChessboardCorners(imgR, patternSize, cornersR);
-	
-	cv::Mat F = cv::findFundamentalMat(cornersL, cornersR);
-	
+	bool import;
+	cv::Mat F, R, t, E, cameraMatrix;
+	vector<Point2f> totalcornersL, totalcornersR;
+	std::cout << "Import Calibration? 1-yes 0-no " << std::endl; // Type a number and press enter
+	cin >> import;
+		
+	if(import)
+	{
+	//Read pre-calibrated saved parameters
+		cv::FileStorage fs("./stereoparamsEpipolar.xml", cv::FileStorage::READ);
 
-	float data[9] = {1301.126792457533, 0, 816.1724470301982, 0, 1309.844817775022, 621.6956484968867, 0, 0, 1 };
-	cv::Mat cameraMatrix = cv::Mat(3, 3, CV_32F, data);
-	cv::Mat R, t, E;
-	E = findEssentialMat(cornersL, cornersR, cameraMatrix); //tem mais parametros
-	recoverPose(E, cornersL, cornersR, cameraMatrix, R, t);
+		fs["Fmat"] >> F;
+		fs["Essencial"] >> E;
+		fs["Rot"] >> R;
+		fs["Trns"] >> t; 
+		fs["MintL"] >> cameraMatrix; 
+		
+	}else
+	{
 	
+		std::cout << "-- Reading Images --" << std::endl;
+		// Extracting path of individual image stored in a given directory
+		std::vector<cv::String> imagesL, imagesR;
+		
+		// Path of the folder containing checkerboard images
+		std::string pathR = "./Depth_Disp/L/*.jpg"; //!!!!!!!!!!!!!!!!!!!!
+		std::string pathL = "./Depth_Disp/R/*.jpg"; //!!!!!!!!!!!!!!!!!!!!!!!
+
+		cv::glob(pathL, imagesL);
+		cv::glob(pathR, imagesR);
+
+		cv::Mat frameL, frameR, grayL, grayR;
+		// vector to store the pixel coordinates of detected checker board corners 
+		vector<Point2f> cornersL, cornersR;
+		bool successL, successR;
+
+		// Looping over all the images in the directory
+		for(int i{0}; i<imagesR.size(); i++)
+		{
+		  
+			std::cout << imagesL[i] << std::endl;
+			std::cout << imagesR[i] << std::endl;
+		  
+			frameL = cv::imread(imagesL[i]);
+			cv::cvtColor(frameL,grayL,cv::COLOR_BGR2GRAY);
+	  
+			frameR = cv::imread(imagesR[i]);
+			cv::cvtColor(frameR,grayR,cv::COLOR_BGR2GRAY);
+
+			// Finding checker board corners
+			// If desired number of corners are found in the image then success = true  
+			successL = cv::findChessboardCorners(grayL, patternSize, cornersL);
+			successR = cv::findChessboardCorners(grayR, patternSize, cornersR);
+		  
+			/*
+			* If desired number of corner are detected,
+			* we refine the pixel coordinates and display 
+			* them on the images of checker board
+			*/
+			if((successL) && (successR))
+			{
+				cv::TermCriteria criteria(cv::TermCriteria::EPS | cv::TermCriteria::MAX_ITER, 30, 0.001);
+
+				// refining pixel coordinates for given 2d points.
+				cv::cornerSubPix(grayL,cornersL,cv::Size(11,11), cv::Size(-1,-1),criteria);
+				cv::cornerSubPix(grayR,cornersR,cv::Size(11,11), cv::Size(-1,-1),criteria);
+
+				for(int i = 0 ; i< cornersL.size(); i++)
+				{
+					totalcornersL.push_back(cornersL[i]);
+					totalcornersR.push_back(cornersR[i]);
+				}
+			}
+		
+		}
+		F = cv::findFundamentalMat(totalcornersL, totalcornersR);
+	
+		float data[9] = {1301.126792457533, 0, 816.1724470301982, 0, 1309.844817775022, 621.6956484968867, 0, 0, 1 };
+		cameraMatrix = cv::Mat(3, 3, CV_32F, data);
+		E = findEssentialMat(cornersL, cornersR, cameraMatrix); //tem mais parametros
+		recoverPose(E, cornersL, cornersR, cameraMatrix, R, t);
+		
+		cv::FileStorage cv_file = cv::FileStorage("./stereoparamsEpipolar.xml", cv::FileStorage::WRITE);
+		cv_file.write("Fmat",F);
+		cv_file.write("Essencial",E); 
+		cv_file.write("Rot",R);
+		cv_file.write("Trns",t);
+		cv_file.write("MintL",cameraMatrix);
+		
+	}
+	
+	//Manual import of matrix R and t
+	/*
+	float  dataR[9] = { 0.7071 , 0.5000  , -0.5000 ,   -0.5000  ,  0.8536 ,   0.1464,    0.5000,    0.1464,    0.8536};
+	R =  cv::Mat(3, 3, CV_32F, dataR);
+	float  datat[9] = { -0.0742, -0.0525, -0.0525};
+	t =  cv::Mat(3, 1, CV_32F, datat);
+	*/
+		
 	std::cout << "Fundamental Matrix: " << F << std::endl;
 	std::cout << "Essencial Matrix: " << E << std::endl;
 	std::cout << "R Matrix: " << R << std::endl;
 	std::cout << "t Matrix: " << t << std::endl;
 	std::cout << "Intrinsics Matrix: " << cameraMatrix << std::endl;
 	
-	drawEpipolarLines(F,imgL,imgR,cornersL,cornersR);
-	
 	//Draw one line
+	//drawEpipolarLines(F,frameL,frameR,totalcornersL,totalcornersR);
+	cv::Mat frameL = cv::imread("./Depth_Disp/L/L50.jpg");
+	cv::Mat frameR = cv::imread("./Depth_Disp/R/R50.jpg");
 	
-	
-	drawOneLine(F,imgL,imgR,NewPoint);
+	cv::namedWindow("matches",cv::WINDOW_NORMAL);
+	cv::resizeWindow("matches",960,536);
+	cv::setMouseCallback("matches", onMouse, reinterpret_cast<void *>(&frameL));
+	cv::imshow("matches", frameL);
+	cv::waitKey(0);
+  
+	drawOneLine(F,frameL,frameR,NewPoint);
 }
