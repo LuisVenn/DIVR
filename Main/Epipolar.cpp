@@ -278,7 +278,7 @@ int main(){
 		
 		}
 		F = cv::findFundamentalMat(totalcornersL, totalcornersR);
-	
+		
 		float data[9] = {1301.126792457533, 0, 816.1724470301982, 0, 1309.844817775022, 621.6956484968867, 0, 0, 1 };
 		cameraMatrix = cv::Mat(3, 3, CV_32F, data);
 		E = findEssentialMat(cornersL, cornersR, cameraMatrix); //tem mais parametros
@@ -309,8 +309,10 @@ int main(){
 	
 	//Draw one line
 	//drawEpipolarLines(F,frameL,frameR,totalcornersL,totalcornersR);
-	cv::Mat frameL = cv::imread("./Depth_Disp/L/L50.jpg");
-	cv::Mat frameR = cv::imread("./Depth_Disp/R/R50.jpg");
+	//cv::Mat frameL = cv::imread("./Depth_Disp/L/L50.jpg");
+	//cv::Mat frameR = cv::imread("./Depth_Disp/R/R50.jpg");
+	cv::Mat frameL = cv::imread("./Depth_Disp/Left.jpg");
+	cv::Mat frameR = cv::imread("./Depth_Disp/Right.jpg");
 	
 	cv::namedWindow("matches",cv::WINDOW_NORMAL);
 	cv::resizeWindow("matches",960,536);
