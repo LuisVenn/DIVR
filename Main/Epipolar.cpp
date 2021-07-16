@@ -4,20 +4,23 @@
 #include <stdio.h>
 #include <iostream>
 #include <opencv2/core/types.hpp>
-
 #include "opencv2/opencv_modules.hpp"
 #include <opencv2/core/utility.hpp>
 #include "opencv2/imgcodecs.hpp"
 
+#include <Eigen/Dense>
 #include <string>
 
 #include <fstream>
 using namespace std;
 using namespace cv;
 using namespace cv::detail;
+using Eigen::MatrixXd;
+
 cv::Size patternSize(6,9);
 
-vector<Point2f> NewPoint;
+vector<Point2f> Left,Right;
+bool setpoint = true;
 	
 void onMouse(int event, int x, int y, int flags, void *param)
 {
@@ -26,7 +29,12 @@ void onMouse(int event, int x, int y, int flags, void *param)
 	case cv::EVENT_LBUTTONDOWN:
 		cout << "at(" << x << "," << y << ")pixs value is:" << static_cast<int>
 			(im->at<uchar>(cv::Point(x, y))) << endl;
-		NewPoint.push_back(Point2f(x, y));
+		if(setpoint)
+		{
+			Left.push_back(Point2f(x, y));
+		}else{
+			Right.push_back(Point2f(x, y));
+		}
 		break;
 	}
 
@@ -101,6 +109,9 @@ static void drawOneLine (cv::Mat F, cv::Mat& img1, cv::Mat& img2, vector<Point2f
       cv::Point(img1.cols,-(epilines1[i][2]+epilines1[i][0]*img1.cols)/epilines1[i][1]),
       color);
     cv::circle(outImg(rect1), points1[i], 3, color, -1, LINE_AA);
+    char str[2];
+	sprintf(str,"%ld",i);
+	putText(outImg(rect1), str, points1[i], 1, 3,  Scalar(0,0,255),3);
  
   }
   
@@ -110,6 +121,86 @@ static void drawOneLine (cv::Mat F, cv::Mat& img1, cv::Mat& img2, vector<Point2f
   cv::imshow("matches2", outImg);
   cv::waitKey(0);
 }
+
+void GetPly(std::vector<cv::Point3d> Vec_xr)
+{
+	std::ofstream outfile("pointcloud.ply");
+	outfile << "ply\n" << "format ascii 1.0\n";
+	outfile << "element vertex " << Vec_xr.size() << "\n";
+	outfile << "property float x\n" << "property float y\n" << "property float z\n";
+	outfile << "property uchar red\n" << "property uchar green\n" << "property uchar blue\n" << "element face " << Vec_xr.size() << "\n";
+	outfile << "property list uchar int vertex_indices\n" << "end_header\n";
+
+	for (int i = 0; i < Vec_xr.size(); i++)
+	{
+		outfile << Vec_xr[i].x << " ";
+		outfile << Vec_xr[i].y << " ";
+		outfile << Vec_xr[i].z << " 255 0 0"; //pontos vermelhos
+		
+		outfile << "\n";
+	}
+	outfile.close();
+}
+
+void Get3dPoints(std::vector<cv::Point3d> &Vec_xr){
+	
+	MatrixXd  Mint(3,4), Rini(3,3), tini(3,1), R(3,3), t(3,1), Rt(4,4);
+	
+	Mint << 1357, 0   , 820, 0, 
+			0 	, 1357, 616, 0,
+			0   , 0   , 1  , 0;
+			
+	Rini << 0.707106781186547, 0.5              , -0.5             ,
+			-0.5			 , 0.853553390593274, 0.146446609406726,
+			0.5			     , 0.146446609406726, 0.853553390593274;
+		 
+	tini << 0.0742, 0.0217, 0.0217;
+	
+	std::cout << "Mint:\n" << Mint << std::endl;
+	std::cout << "Rini:\n" << Rini << std::endl;
+	std::cout << "tini:\n" << tini << std::endl;
+	
+	R = Rini.transpose();
+	t = -1*R.transpose()*tini;
+	
+	Rt << R(0,0), R(0,1), R(0,2), t(0,0),
+		  R(1,0), R(1,1), R(1,2), t(1,0),
+		  R(2,0), R(2,1), R(2,2), t(2,0),
+		  0     , 0     , 0     , 1     ;
+	
+	std::cout << "Rt:" << Rt << std::endl;
+	MatrixXd p(3,4), m(3,4);
+	p = Mint*Rt;
+	m = Mint;
+	
+	MatrixXd ul(3,1), ur(3,1), A(4,3), b(4,1);
+	MatrixXd xr(3,1);
+	cv::Point3d xr_point;
+	for (int i = 0; i < Left.size(); i++)
+	{
+		ul << Left[i].x, Left[i].y, 1;
+		ur << Right[i].x-1640, Right[i].y, 1;
+		std::cout << "ul: " << ul << std::endl;
+		std::cout << "ur: " << ur << std::endl;
+		
+		A << ur(0,0)*m(2,0)-m(0,0), ur(0,0)*m(2,1)-m(0,1), ur(0,0)*m(2,2)-m(0,2),
+			 ur(1,0)*m(2,0)-m(1,0), ur(1,0)*m(2,1)-m(1,1), ur(1,0)*m(2,2)-m(1,2),
+			 ul(0,0)*p(2,0)-p(0,0), ul(0,0)*p(2,1)-p(0,1), ul(0,0)*p(2,2)-p(0,2),
+			 ul(1,0)*p(2,0)-p(1,0), ul(1,0)*p(2,1)-p(1,1), ul(1,0)*p(2,2)-p(1,2);
+		
+		b << m(0,3)-m(2,3), m(1,3)-m(2,3), p(0,3)-p(2,3), p(1,3)-p(2,3);
+		
+		
+		MatrixXd buff = A.transpose()*A;
+		xr = buff.inverse()*A.transpose()*b;
+		std::cout << "xr: " << xr << std::endl;
+		xr_point.x = xr(0,0);
+		xr_point.y = xr(1,0);
+		xr_point.z = xr(2,0);
+		Vec_xr.push_back(xr_point);
+	}
+}
+
 int main(){
 	bool import;
 	cv::Mat F, R, t, E, cameraMatrix;
@@ -136,8 +227,8 @@ int main(){
 		std::vector<cv::String> imagesL, imagesR;
 		
 		// Path of the folder containing checkerboard images
-		std::string pathR = "./Depth_Disp/L/*.jpg"; //!!!!!!!!!!!!!!!!!!!!
-		std::string pathL = "./Depth_Disp/R/*.jpg"; //!!!!!!!!!!!!!!!!!!!!!!!
+		std::string pathL = "./Depth_Disp/L/*.jpg"; //!!!!!!!!!!!!!!!!!!!!
+		std::string pathR = "./Depth_Disp/R/*.jpg"; //!!!!!!!!!!!!!!!!!!!!!!!
 
 		cv::glob(pathL, imagesL);
 		cv::glob(pathR, imagesR);
@@ -226,6 +317,16 @@ int main(){
 	cv::setMouseCallback("matches", onMouse, reinterpret_cast<void *>(&frameL));
 	cv::imshow("matches", frameL);
 	cv::waitKey(0);
+	setpoint = false;
   
-	drawOneLine(F,frameL,frameR,NewPoint);
+	drawOneLine(F,frameL,frameR,Left);
+	
+	std::vector<cv::Point3d> Vec_xr;
+	
+	if(Left.size() == Right.size())
+		Get3dPoints(Vec_xr);
+	else
+		std::cout << "Error: Not equal number of features in each image" << std::endl;
+		
+	GetPly(Vec_xr);
 }
