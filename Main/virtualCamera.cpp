@@ -84,20 +84,23 @@ void multVector(vector<Point2f> &v, float k){
 }
 
 //(defines the angle of warping)
-void estimateTransform(cv::Mat imgL,cv::Mat imgR, vector<Point2f> &cornersL, vector<Point2f> &cornersR, vector<Point2f> &cornersL_new, vector<Point2f> &cornersR_new, cv::Mat &Ht_L, cv::Mat &Ht_R, cv::Size &warpedL_size, cv::Size &warpedR_size, float k)
+void estimateTransform(cv::Mat imgL,cv::Mat imgR, vector<Point2f> &cornersC_estimated, vector<Point2f> &cornersL, vector<Point2f> &cornersR, vector<Point2f> &cornersL_new, vector<Point2f> &cornersR_new, cv::Mat &Ht_L, cv::Mat &Ht_R, cv::Size &warpedL_size, cv::Size &warpedR_size, float k)
 { 
 	
-	vector<Point2f> cornersC_estimated = cornersL;
+	cornersC_estimated = cornersL;
 	//Estimate by assuming linear the corners of C
 	
 	diffVectors(cornersC_estimated, cornersR);
 	multVector(cornersC_estimated,k);
 	sumVectors(cornersC_estimated,cornersR);
+
+	
 	warpedL_size = getTransform(imgL, cornersL, cornersC_estimated, Ht_L);
 	warpedR_size = getTransform(imgR, cornersR, cornersC_estimated, Ht_R);
 	
 	cv::perspectiveTransform(cornersL, cornersL_new, Ht_L);
 	cv::perspectiveTransform(cornersR, cornersR_new, Ht_R);
+	
 }
 
 int horizontal_stitching_calib(cv::Mat &img1, cv::Mat &img2, vector<Point2f> &corners1, vector<Point2f> &corners2)
@@ -186,13 +189,13 @@ cv::Mat horizontal_stitching_apply(cv::Mat &img1, cv::Mat &img2,int avg)
 	return outputGhost;
 }	
 
-cv::Mat cut_frame(cv::Mat &result, float k, cv::Size frame)
+cv::Mat cut_frame(cv::Mat &result, cv::Size frame, vector<Point2f> cornersL_new, vector<Point2f> cornersC_estimated)
 {	
 	cv::Mat output(frame.height,frame.width, CV_8UC3 );
-	std::cout << "percentagem: " << (1-k)*100 << std::endl;
-	//std::cout << "largura: " << result.cols << "ponto esq + width: " << floor(k*(result.cols-frame.width)) + output.cols << std::endl;
-	//std::cout << "largura frame: " << frame.width << "largura output: " << output.cols << std::endl;
-	result(cv::Rect(floor((1-k)*(result.cols-frame.width)),100,output.cols, output.rows)).copyTo(output(cv::Rect(0,0,output.cols,output.rows)));
+	//std::cout << "Esq: " << cornersL_new[0].x-cornersC_estimated[0].x << " Top: " << cornersL_new[0].y-cornersC_estimated[0].y << std::endl;
+	
+	//std::cout << "altura output: " << output.rows << "largura output: " << output.cols << std::endl;
+	result(cv::Rect(cornersL_new[0].x-cornersC_estimated[0].x,cornersL_new[0].y-cornersC_estimated[0].y,output.cols, output.rows)).copyTo(output(cv::Rect(0,0,output.cols,output.rows)));
 	return output;
 }
 
@@ -215,6 +218,7 @@ int main()
 	//find chessboards
 	std::cout << "-- Searching for chessboard --" << std::endl;
 	vector<Point2f> cornersL, cornersR, cornersL_new, cornersR_new;
+	vector<Point2f> cornersC_estimated;
 	bool found1 = cv::findChessboardCorners(imgL, patternSize, cornersL);
 	bool found2 = cv::findChessboardCorners(imgR, patternSize, cornersR);
 	
@@ -227,14 +231,16 @@ int main()
 	cv::namedWindow("matches",cv::WINDOW_NORMAL);
 	cv::resizeWindow("matches",960,536);
 	cv::Mat result, output;	
-	for( ki =2.5; ki < 45; ki+=2.5)
+	imgL = cv::imread("../Images/squarefloor2/L1_squarefloor2_box2.jpg");
+	imgR = cv::imread("../Images/squarefloor2/R1_squarefloor2_box2.jpg");
+	for( ki =0; ki < 45; ki+=2.5)
 	{
 		k = 1 - ki/45;
-		estimateTransform(imgL, imgR, cornersL, cornersR, cornersL_new, cornersR_new, Ht_L, Ht_R, warpedL_size, warpedR_size, k);
-	
+		estimateTransform(imgL, imgR, cornersC_estimated, cornersL, cornersR, cornersL_new, cornersR_new, Ht_L, Ht_R, warpedL_size, warpedR_size, k);
 		//Warp the prespective to get the value of the horizontal and vertical displacement
 		cv::warpPerspective(imgL, imgL_warp, Ht_L, warpedL_size);
 		cv::warpPerspective(imgR, imgR_warp, Ht_R, warpedR_size);
+		//Warp Point corners
 				
 		avg_v = vertically_allign_calib(imgL_warp, imgR_warp, cornersL_new, cornersR_new);
 		avg_h = horizontal_stitching_calib(imgL_warp, imgR_warp, cornersL_new, cornersR_new);
@@ -242,10 +248,11 @@ int main()
 		vertically_allign_apply(imgL_warp, imgR_warp, avg_v);
 		
 		result = horizontal_stitching_apply(imgL_warp,imgR_warp,avg_h);
-		output = cut_frame(result, k, frame); 
+	
+		output = cut_frame(result, frame, cornersL_new, cornersC_estimated); 
 		std::cout << "angle: " << ki << std::endl;
 		cv::imshow("matches",output);
-		//cv::waitKey();
+		cv::waitKey();
 		
 	}		
 }
