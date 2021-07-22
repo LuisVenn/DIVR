@@ -84,7 +84,7 @@ void multVector(vector<Point2f> &v, float k){
 }
 
 //(defines the angle of warping)
-void estimateTransform(cv::Mat imgL,cv::Mat imgR, vector<Point2f> &cornersC_estimated, vector<Point2f> &cornersL, vector<Point2f> &cornersR, vector<Point2f> &cornersL_new, vector<Point2f> &cornersR_new, cv::Mat &Ht_L, cv::Mat &Ht_R, cv::Size &warpedL_size, cv::Size &warpedR_size, float k)
+void estimateLinearTransform(cv::Mat imgL,cv::Mat imgR, vector<Point2f> &cornersC_estimated, vector<Point2f> &cornersL, vector<Point2f> &cornersR, vector<Point2f> &cornersL_new, vector<Point2f> &cornersR_new, cv::Mat &Ht_L, cv::Mat &Ht_R, cv::Size &warpedL_size, cv::Size &warpedR_size, float k)
 { 
 	
 	cornersC_estimated = cornersL;
@@ -94,6 +94,36 @@ void estimateTransform(cv::Mat imgL,cv::Mat imgR, vector<Point2f> &cornersC_esti
 	sumVectors(cornersC_estimated,cornersR);
 
 	
+	warpedL_size = getTransform(imgL, cornersL, cornersC_estimated, Ht_L);
+	warpedR_size = getTransform(imgR, cornersR, cornersC_estimated, Ht_R);
+	
+	cv::perspectiveTransform(cornersL, cornersL_new, Ht_L);
+	cv::perspectiveTransform(cornersR, cornersR_new, Ht_R);
+
+}
+
+void estimateParabolaTransform(cv::Mat imgL,cv::Mat imgR, vector<Point2f> &cornersC_estimated, vector<Point2f> &cornersL, vector<Point2f> &cornersR, vector<Point2f> &cornersL_new, vector<Point2f> &cornersR_new, cv::Mat &Ht_L, cv::Mat &Ht_R, cv::Size &warpedL_size, cv::Size &warpedR_size, float k)
+{ 
+	vector<float> c1(cornersL.size());
+	float c2 = -0.409510896158935;
+	float c3 = 0.000239366927275303;
+	
+	for(int i = 0; i<cornersL.size();i++)
+	{
+		c1[i] = cornersL[i].y - c2*cornersL[i].x - c3*cornersL[i].x*cornersL[i].x;
+		std::cout << c1[i] << std::endl;
+	}
+	
+	for(int i = 0; i<cornersL.size();i++)
+	{
+		cornersC_estimated[i].x = cornersR[i].x+k*(cornersL[i].x - cornersR[i].x);
+	}
+	
+	for(int i = 0; i<cornersL.size();i++)
+	{
+		cornersC_estimated[i].y = c1[i] + c2*cornersC_estimated[i].x + c3*cornersC_estimated[i].x*cornersC_estimated[i].x;
+	}
+
 	warpedL_size = getTransform(imgL, cornersL, cornersC_estimated, Ht_L);
 	warpedR_size = getTransform(imgR, cornersR, cornersC_estimated, Ht_R);
 	
@@ -221,12 +251,13 @@ int main()
 	//find chessboards
 	std::cout << "-- Searching for chessboard --" << std::endl;
 	vector<Point2f> cornersL, cornersCR, cornersCL, cornersR, cornersL_new, cornersR_new, cornersR_calib,cornersL_calib;
-	vector<Point2f> cornersC_estimated;
+	
 	bool found1 = cv::findChessboardCorners(imgL_calib, patternSize, cornersL_calib);
 	bool found2 = cv::findChessboardCorners(imgR_calib, patternSize, cornersR_calib);
 	bool found3 = cv::findChessboardCorners(imgCL, patternSize, cornersCL);
 	bool found4 = cv::findChessboardCorners(imgCR, patternSize, cornersCR);
 	
+	vector<Point2f> cornersC_estimated(cornersL_calib.size());
 	//estimate homography
 	std::cout << "-- Estimate homography --" << std::endl;
 	float ki,k;	
@@ -255,7 +286,8 @@ int main()
 			k = 1 - (ki-45)/45;
 		}
 		
-		estimateTransform(imgL, imgR, cornersC_estimated, cornersL, cornersR, cornersL_new, cornersR_new, Ht_L, Ht_R, warpedL_size, warpedR_size, k);
+		estimateParabolaTransform(imgL, imgR, cornersC_estimated, cornersL, cornersR, cornersL_new, cornersR_new, Ht_L, Ht_R, warpedL_size, warpedR_size, k);
+		std::cout << "sai" << std::endl;
 		//Warp the prespective to get the value of the horizontal and vertical displacement
 		cv::warpPerspective(imgL, imgL_warp, Ht_L, warpedL_size);
 		cv::warpPerspective(imgR, imgR_warp, Ht_R, warpedR_size);
