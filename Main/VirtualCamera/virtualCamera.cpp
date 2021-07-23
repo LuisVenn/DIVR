@@ -197,8 +197,8 @@ cv::Mat horizontal_stitching_apply(cv::Mat &img1, cv::Mat &img2,int avg)
 	cv::cvtColor( img2, img2_gray, cv::COLOR_RGB2GRAY );
 	cv::cvtColor( output, output_gray, cv::COLOR_RGB2GRAY);
 	
-	mask.setTo(255, img2_gray > 0);
-    mask_output.setTo(255, output_gray > 0);
+	mask.setTo(255, img2_gray > 1);
+    mask_output.setTo(255, output_gray > 1);
     mask_output.setTo(0,output_gray == 255);
     cv::Mat outputBuff = output.clone();
     
@@ -237,10 +237,10 @@ int main()
 	std::cout << "-- Reading Images --" << std::endl;
 	cv::Mat imgL, imgR, imgL_warp, imgR_warp, imgCL, imgCR,imgR_calib, imgL_calib;
 	
-	imgL_calib = cv::imread("./VirtualL/VirtualL2.jpg");
-	imgCL= cv::imread("./VirtualC/VirtualC2.jpg");
-	imgCR = cv::imread("./VirtualC/VirtualC.jpg");
-	imgR_calib = cv::imread("./VirtualR/VirtualR.jpg");
+	imgL_calib = cv::imread("./VirtualL/1.jpg");
+	imgCL= cv::imread("./VirtualC/1.jpg");
+	imgCR = cv::imread("./VirtualC/0.jpg");
+	imgR_calib = cv::imread("./VirtualR/0.jpg");
 	
 	//GET HOMOGRAPHY MATRIX AND SIZE
 	std::cout << "-- Getting new calibration parameters --" << std::endl;
@@ -266,6 +266,8 @@ int main()
 	frame.height = imgL_calib.rows;
 	cv::namedWindow("matches",cv::WINDOW_NORMAL);
 	cv::resizeWindow("matches",960,536);
+	cv::namedWindow("result",cv::WINDOW_NORMAL);
+	cv::resizeWindow("result",960,536);
 	cv::Mat result, output;	
 	
 	for( ki = 0; ki < 90; ki+=2.5)
@@ -286,7 +288,7 @@ int main()
 			k = 1 - (ki-45)/45;
 		}
 		
-		estimateParabolaTransform(imgL, imgR, cornersC_estimated, cornersL, cornersR, cornersL_new, cornersR_new, Ht_L, Ht_R, warpedL_size, warpedR_size, k);
+		estimateLinearTransform(imgL, imgR, cornersC_estimated, cornersL, cornersR, cornersL_new, cornersR_new, Ht_L, Ht_R, warpedL_size, warpedR_size, k);
 		std::cout << "sai" << std::endl;
 		//Warp the prespective to get the value of the horizontal and vertical displacement
 		cv::warpPerspective(imgL, imgL_warp, Ht_L, warpedL_size);
@@ -302,6 +304,7 @@ int main()
 	
 		output = cut_frame(result, frame, cornersL_new, cornersC_estimated,avg_v); 
 		std::cout << "angle: " << ki << std::endl;
+		cv::imshow("result",result);
 		cv::imshow("matches",output);
 		cv::waitKey();
 		
