@@ -20,6 +20,27 @@ using namespace cv::detail;
 
 cv::Size patternSize(6,9);
 
+vector<Point2f> Left,Right;
+bool setpoint = true;
+	
+void onMouse(int event, int x, int y, int flags, void *param)
+{
+	cv::Mat *im = reinterpret_cast<cv::Mat*>(param);
+	switch (event){
+	case cv::EVENT_LBUTTONDOWN:
+		cout << "at(" << x << "," << y << ")pixs value is:" << static_cast<int>
+			(im->at<uchar>(cv::Point(x, y))) << endl;
+		if(setpoint)
+		{
+			Left.push_back(Point2f(x, y));
+		}else{
+			Right.push_back(Point2f(x, y));
+		}
+		break;
+	}
+
+}
+
 //vector calcs
 void multVector(vector<Point2f> &v, float k){
      for(int i=0; i<v.size(); i++)
@@ -166,7 +187,7 @@ void vertically_allign_apply(cv::Mat &img1, cv::Mat &img2, int avg)
     int borderType = cv::BORDER_CONSTANT;
     int no = 0;
     cv::Scalar value(255,255,255);
-  
+	
 	//Create Border
 	if (avg > 0)
 		copyMakeBorder( img2, img2, avg, no, no, no, borderType, value );
@@ -257,6 +278,18 @@ int main()
 	bool found3 = cv::findChessboardCorners(imgCL, patternSize, cornersCL);
 	bool found4 = cv::findChessboardCorners(imgCR, patternSize, cornersCR);
 	
+	cv::namedWindow("matches2",cv::WINDOW_NORMAL);
+	cv::resizeWindow("matches2",960,536);
+	cv::setMouseCallback("matches2", onMouse, reinterpret_cast<void *>(&imgL_calib));
+	cv::imshow("matches2", imgL_calib);
+	cv::waitKey(0);
+	setpoint=false;
+	cv::setMouseCallback("matches2", onMouse, reinterpret_cast<void *>(&imgCL));
+	cv::imshow("matches2", imgCL);
+	cv::waitKey(0);
+	cornersL_calib = Left;
+	cornersCL = Right;
+	
 	vector<Point2f> cornersC_estimated(cornersL_calib.size());
 	//estimate homography
 	std::cout << "-- Estimate homography --" << std::endl;
@@ -297,7 +330,8 @@ int main()
 				
 		avg_v = vertically_allign_calib(imgL_warp, imgR_warp, cornersL_new, cornersR_new);
 		avg_h = horizontal_stitching_calib(imgL_warp, imgR_warp, cornersL_new, cornersR_new);
-		
+		std::cout << "avg_h: " << avg_v << std::endl;
+		std::cout << "avg_v: " << avg_h << std::endl;
 		vertically_allign_apply(imgL_warp, imgR_warp, avg_v);
 		
 		result = horizontal_stitching_apply(imgL_warp,imgR_warp,avg_h);
