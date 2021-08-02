@@ -68,6 +68,73 @@ void multVector(vector<Point2f> &v, float k){
 	 }
  }
  
+ bool organiza (DMatch p1, DMatch p2) 
+{ 
+	return p1.distance < p2.distance; 
+}
+
+ void getMatches(cv::Mat img1, cv::Mat img2, vector<Point2f> &cornersL, vector<Point2f> &cornersR )
+{
+	//Features dectection and matching
+	Ptr<ORB> detector = cv::ORB::create();
+	std::vector<KeyPoint> keypoints1,keypoints2;
+	Mat descriptors1,descriptors2;
+	cv::Mat mask1,mask2;
+	mask1 = cv::Mat::zeros(img1.size(), CV_8U);
+	mask2 = cv::Mat::zeros(img2.size(), CV_8U);
+    
+    mask1(cv::Rect(0, 0, mask1.cols, mask1.rows)).setTo(255);
+    mask2(cv::Rect(0, 0, mask1.cols, mask1.rows)).setTo(255);
+	
+	detector->detectAndCompute( img1, mask1, keypoints1, descriptors1 );
+	detector->detectAndCompute( img2, mask2, keypoints2, descriptors2 );
+	
+	//Matching Features
+	BFMatcher matcher(NORM_HAMMING);
+	
+	std::vector<vector<DMatch> > matches;
+
+	matcher.knnMatch(descriptors1, descriptors2, matches,2);
+
+	std::vector<DMatch> match1;
+	std::vector<DMatch> match2;
+
+    std::vector<DMatch> sorted_matches,good_matches;
+    
+    //get the best match
+    for (size_t i = 0; i < matches.size(); i++)
+    {
+		 sorted_matches.push_back(matches[i][0]);
+    }
+	
+	sort(sorted_matches.begin(),sorted_matches.end(),organiza);
+	
+   	std::cout << "--------------------" << std::endl;
+   	std::cout << "----Good matches----" << std::endl;
+   	std::cout << "--------------------" << std::endl;
+   	
+   	for (size_t i = 0; i < sorted_matches.size(); i++)
+    {
+		if (sorted_matches[i].distance < 10)
+		{
+			good_matches.push_back(sorted_matches[i]);
+			cornersL.push_back(keypoints1[sorted_matches[i].queryIdx].pt);
+			cornersR.push_back(keypoints2[sorted_matches[i].trainIdx].pt);
+			std::cout << "Keypoint 1: " << keypoints1[sorted_matches[i].queryIdx].pt << std::endl;
+			std::cout << "Keypoint 2: " << keypoints2[sorted_matches[i].trainIdx].pt << std::endl;
+			std::cout << "Distance: " << sorted_matches[i].distance << std::endl;
+			std::cout << "--------------------" << std::endl;
+		}
+    }
+    
+    cv::Mat imgmatches;
+    cv::drawMatches(img1, keypoints1, img2, keypoints2, good_matches, imgmatches);
+    cv::namedWindow("matches",cv::WINDOW_NORMAL);
+	cv::resizeWindow("matches",960,536);
+    cv::imshow("matches",imgmatches);
+	cv::waitKey();
+}
+
  //(estimates the transformation between the real plane and the estimated, returns mask size for warping)
  cv::Size getTransform(cv::Mat &img1, vector<Point2f> &corners1, vector<Point2f> &corners2, cv::Mat &Ht)
 {
@@ -195,7 +262,7 @@ void vertically_allign_apply(cv::Mat &img1, cv::Mat &img2, int avg)
 		copyMakeBorder( img1, img1, -avg, no, no, no, borderType, value );
 }
 
-cv::Mat horizontal_stitching_apply(cv::Mat &img1, cv::Mat &img2,int avg)
+cv::Mat horizontal_stitching_apply(cv::Mat &img1, cv::Mat &img2,int avg, float k)
 {
 	cv::Mat output = img1.clone();
 	
@@ -233,7 +300,8 @@ cv::Mat horizontal_stitching_apply(cv::Mat &img1, cv::Mat &img2,int avg)
 	cv::Mat outputBuff2 = outputBuff.clone();
 	output.copyTo(outputBuff,mask_output);
 	
-	cv::Mat outputGhost = outputBuff2*0.5 + outputBuff*0.5;
+	
+	cv::Mat outputGhost = outputBuff2*(1-k) + outputBuff*k;
 	
 	//If want to show ghost change to outputGhost
 	return outputGhost;
@@ -258,8 +326,10 @@ int main()
 	std::cout << "-- Reading Images --" << std::endl;
 	cv::Mat imgL, imgR, imgL_warp, imgR_warp, imgCL, imgCR,imgR_calib, imgL_calib;
 	
-	imgL_calib = cv::imread("./VirtualL/1.jpg");
-	imgCL= cv::imread("./VirtualC/1.jpg");
+	imgL_calib = cv::imread("./L75.jpg");
+	imgCL= cv::imread("./R75.jpg");
+	//imgL_calib = cv::imread("./VirtualL/1.jpg");
+	//imgCL= cv::imread("./VirtualC/1.jpg");
 	imgCR = cv::imread("./VirtualC/0.jpg");
 	imgR_calib = cv::imread("./VirtualR/0.jpg");
 	
@@ -270,14 +340,26 @@ int main()
 	int warpedL_height, warpedL_width , warpedR_height, warpedR_width, avg_v, avg_h;
 	
 	//find chessboards
-	std::cout << "-- Searching for chessboard --" << std::endl;
+	
 	vector<Point2f> cornersL, cornersCR, cornersCL, cornersR, cornersL_new, cornersR_new, cornersR_calib,cornersL_calib;
 	
+	int val;
+	std::cout << "Method? CHESS-1, FEATURES -0, MANUAL -2" << std::endl;
+	std::cin >> val;
+	if(val==1)
+	{
+	std::cout << "-- Searching for chessboard --" << std::endl;
 	bool found1 = cv::findChessboardCorners(imgL_calib, patternSize, cornersL_calib);
 	bool found2 = cv::findChessboardCorners(imgR_calib, patternSize, cornersR_calib);
 	bool found3 = cv::findChessboardCorners(imgCL, patternSize, cornersCL);
 	bool found4 = cv::findChessboardCorners(imgCR, patternSize, cornersCR);
-	
+	}
+	else if(val==0)
+	{
+	std::cout << "-- Searching for Matches --" << std::endl;
+	getMatches(imgL_calib, imgCL, cornersL_calib, cornersCL );
+	}else
+	{
 	cv::namedWindow("matches2",cv::WINDOW_NORMAL);
 	cv::resizeWindow("matches2",960,536);
 	cv::setMouseCallback("matches2", onMouse, reinterpret_cast<void *>(&imgL_calib));
@@ -289,6 +371,7 @@ int main()
 	cv::waitKey(0);
 	cornersL_calib = Left;
 	cornersCL = Right;
+	}
 	
 	vector<Point2f> cornersC_estimated(cornersL_calib.size());
 	//estimate homography
@@ -302,6 +385,10 @@ int main()
 	cv::namedWindow("result",cv::WINDOW_NORMAL);
 	cv::resizeWindow("result",960,536);
 	cv::Mat result, output;	
+	
+	////Uncoment for image with flutuantes
+	imgL_calib = cv::imread("./Left.jpg");
+	imgCL= cv::imread("./Right.jpg");
 	
 	for( ki = 0; ki < 90; ki+=2.5)
 	{
@@ -334,7 +421,7 @@ int main()
 		std::cout << "avg_v: " << avg_h << std::endl;
 		vertically_allign_apply(imgL_warp, imgR_warp, avg_v);
 		
-		result = horizontal_stitching_apply(imgL_warp,imgR_warp,avg_h);
+		result = horizontal_stitching_apply(imgL_warp,imgR_warp,avg_h, k);
 	
 		output = cut_frame(result, frame, cornersL_new, cornersC_estimated,avg_v); 
 		std::cout << "angle: " << ki << std::endl;
